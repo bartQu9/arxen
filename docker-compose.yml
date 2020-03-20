@@ -2,7 +2,7 @@ version: '3'
 services:
   web:
     build:
-      context: ./guiClient
+      context: arxen-gui
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
