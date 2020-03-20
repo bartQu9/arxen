@@ -1,0 +1,10 @@
+version: '3'
+services:
+  web:
+    build:
+      context: ./guiClient
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    stdin_open: true
+    tty: true
