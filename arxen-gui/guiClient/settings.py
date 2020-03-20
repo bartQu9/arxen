@@ -19,6 +19,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.0/howto/deployment/checklist/
 
+# TODO add production secret
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'l=12lwhfhp1*z6el4t3++h#y7@2$98-89#+d*1=7a&r0t$cevd'
 
@@ -31,6 +32,7 @@ ALLOWED_HOSTS = ['192.168.99.100']
 # Application definition
 
 INSTALLED_APPS = [
+    'communicator.apps.CommunicatorConfig',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
