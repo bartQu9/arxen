@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+// for golang: $ protoc -I pb/ pb/arxen.proto --go_out=plugins=grpc:arxen-gui-golang/genproto
+
+import "google/protobuf/timestamp.proto";
+
+message Empty {}
+
+message MessageDeliveryStatusResponse {
+    bool Status = 1;
+}
+
+message Message {
+    string Name = 1;
+    string ChatID = 2;
+    string MessageBody = 3;
+    google.protobuf.Timestamp Timestamp = 4;
+}
+
+service MessageDeliveryEvent {
+    rpc SendMessage(Message) returns (MessageDeliveryStatusResponse){}
+}
