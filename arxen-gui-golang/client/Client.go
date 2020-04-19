@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/rsocket/rsocket-go"
 	"github.com/rsocket/rsocket-go/payload"
 	"github.com/rsocket/rsocket-go/rx"
@@ -38,9 +39,10 @@ type Client struct {
 	userIP          string
 	clientsIPs      map[string]bool					// clientIP : status
 	// not in use rn
-	clientsSockets map[rsocket.Client]string       // socket : clientIP
-	chatList       map[string]*chat.Chat           // chatID, *Chat
-	sendDataList   map[string]chan payload.Payload // payload and target chat format: map[clientIP] payload(message, chatID)
+	clientsSockets      map[rsocket.Client]string       // socket : clientIP
+	chatList            map[string]*chat.Chat           // chatID, *Chat
+	sendDataList        map[string]chan payload.Payload // payload and target chat format: map[clientIP] payload(message, chatID)
+	receivedPayloadChan chan payload.Payload            // channel with all incoming payloads
 
 	secretKey 		string							// used for authentication
 }
@@ -70,6 +72,7 @@ func NewUser() *Client {
 	_clientsSockets := make(map[rsocket.Client]string)
 	_chatList       := make(map[string]*chat.Chat)
 	_sendMessageList:= make(map[string]chan payload.Payload)
+	_receivedPayloadChan := make(chan payload.Payload)
 
 	return &Client{
 		userIP:         userAddr,
@@ -77,6 +80,7 @@ func NewUser() *Client {
 		clientsSockets: _clientsSockets,
 		chatList:       _chatList,
 		sendDataList:   _sendMessageList,
+		receivedPayloadChan: _receivedPayloadChan,
 	}
 }
 
@@ -282,6 +286,9 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 				log.Printf("signal type: %v", s)
 				//close(receives)
 			}).Subscribe(context.Background(), rx.OnNext(func(input payload.Payload) {
+
+				// TODO sort messages
+
 				log.Println("GOT MESSAGE: ", input.DataUTF8())
 				tmpChatID, _ := input.MetadataUTF8()
 				c.chatList[tmpChatID].MessagesChan <- input
@@ -295,4 +302,32 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 			})
 		}),
 	)
+}
+
+// payloads:
+// CHAT_MESSAGE
+//
+
+// helper, handling all incoming messages from each connection
+func (c *Client) recivedPayloadHandler() {
+	for payl := range c.receivedPayloadChan {
+		// read message data/metadata
+		// based on input do something
+		metaByteJson, _ := payl.Metadata()
+		var metadata map[string]interface{}
+		if err := json.Unmarshal(metaByteJson, &metadata); err != nil {
+			// TODO better handle error
+			panic(err)
+		}
+
+		// TODO implement me
+		switch metadata["type"].(string) {
+		case "CHAT_MESSAGE":
+			return
+		case "CHAT_PARTICIPANTS_REQUEST":
+			return
+		}
+
+
+	}
 }
