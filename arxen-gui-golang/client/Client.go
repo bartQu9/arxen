@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 //  APP STACK:
@@ -31,12 +32,15 @@ import (
 // - connect with other clients daemons
 // - control every chat user is participating in
 
+const CONNECTIONS_UPDATE_REFRESH_RATE = 10*time.Second
+
 type Client struct {
 	userIP          string
 	clientsIPs      map[string]bool					// clientIP : status
-	clientsSockets  map[rsocket.Client]string 		// socket : clientIP
-	chatList        map[string]*chat.Chat 			// chatID, *Chat
-	sendMessageList map[string]chan payload.Payload // payload and target chat format: map[clientIP] payload(message, chatID)
+	// not in use rn
+	clientsSockets map[rsocket.Client]string       // socket : clientIP
+	chatList       map[string]*chat.Chat           // chatID, *Chat
+	sendDataList   map[string]chan payload.Payload // payload and target chat format: map[clientIP] payload(message, chatID)
 
 	secretKey 		string							// used for authentication
 }
@@ -68,11 +72,11 @@ func NewUser() *Client {
 	_sendMessageList:= make(map[string]chan payload.Payload)
 
 	return &Client{
-		userIP:          userAddr,
-		clientsIPs:      _clientsIPs,
-		clientsSockets:  _clientsSockets,
-		chatList:        _chatList,
-		sendMessageList: _sendMessageList,
+		userIP:         userAddr,
+		clientsIPs:     _clientsIPs,
+		clientsSockets: _clientsSockets,
+		chatList:       _chatList,
+		sendDataList:   _sendMessageList,
 	}
 }
 
@@ -99,6 +103,7 @@ func (c *Client) eventListener() {
 // method used to create new chat
 func (c *Client) createChat(initList []string) {
 
+	// TODO add chat ID generator
 	chatIDstr := "123"
 
 	// init new chat with complete users list
@@ -116,6 +121,102 @@ func (c *Client) createChat(initList []string) {
 	}
 
 	c.chatList[chatIDstr] = tmpChat
+
+	// create map of adv statuses
+	tmpAdList := initList
+
+
+	// do while chat is not adv to all clients
+	go func() {
+	for {
+		for i, addr := range tmpAdList {
+			if status := c.clientsIPs[addr]; status {
+				// TODO advert chat
+
+				// delete record
+				tmpAdList = append(tmpAdList[:i], tmpAdList[i+1:]...)
+			}
+		}
+		if len(tmpAdList) == 0 {
+			break
+		}
+	}
+	}()
+}
+
+// handler of all connections across itself and other clients
+func (c *Client) connectionsHandler() {
+	for {
+		// refresh at rate
+		time.Sleep(CONNECTIONS_UPDATE_REFRESH_RATE)
+
+		for addr, status := range c.clientsIPs {
+			// if client not connected to particular client try to connect
+			if !status {
+				// find if chan for that client exists
+				// TODO can be written better
+				if c.sendDataList[addr] == nil {
+					log.Println("connectionsHandler: chan non existing - creating ", addr)
+					ch := make(chan payload.Payload)
+					c.sendDataList[addr] = ch
+				}
+				go c.connectToClient(c.sendDataList[addr], addr)
+				// after finished update record
+				c.clientsIPs[addr] = true
+			}
+		}
+	}
+}
+
+// Possible type problem: struct vs payload
+func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
+	// goroutine for connecting to clients
+	// handle channels
+
+	// in advanced scenario ask host for chat clients ips
+
+	// create tmp flux
+	// TODO problem: who is the target
+	// TODO add option of sending custom messages
+	f := flux.Create(func(ctx context.Context, s flux.Sink) {
+		log.Println("STARTED sending new message")
+		for mess := range ch {
+			log.Println("SENDING new message")
+			s.Next(mess)
+		}
+		s.Complete()
+	})
+
+	// new client
+	// TODO change literals to constants
+	cli, err := rsocket.
+		Connect().
+		SetupPayload(payload.NewString(c.userIP,"1234")).
+		Resume().
+		Fragment(1024).
+		Transport(addr).
+		Start(context.Background())
+	if err != nil {
+		panic(err)
+	}
+
+	defer cli.Close()
+
+	log.Println("REQUESTING CHANNEL WITH ", addr)
+
+	// possible error
+	// TODO remove debug stats
+	_, err = cli.RequestChannel(f).
+		DoOnNext(func(elem payload.Payload) {
+			log.Println("GOT new message")
+			tmpChatID, _ := elem.MetadataUTF8()
+			c.chatList[tmpChatID].MessagesChan <- elem
+		}).
+		BlockLast(context.Background())
+}
+
+// runs eventListener() and manages connections
+func (c *Client) clientManager() {
 
 }
 
@@ -187,7 +288,7 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 			}))
 
 			return flux.Create(func(ctx context.Context, s flux.Sink) {
-				for mess := range c.sendMessageList[setup.DataUTF8()] {
+				for mess := range c.sendDataList[setup.DataUTF8()] {
 					s.Next(mess)
 				}
 				s.Complete()
