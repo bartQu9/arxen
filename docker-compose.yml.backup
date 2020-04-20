@@ -1,13 +1,10 @@
 version: '3'
 services:
-  # arxen-gui version in golang
   web:
     build:
-      context: arxen-gui-golang
+      context: arxen-gui
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
-    volumes:
-      - .:/app
     stdin_open: true
     tty: true
