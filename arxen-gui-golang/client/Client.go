@@ -33,18 +33,18 @@ import (
 // - connect with other clients daemons
 // - control every chat user is participating in
 
-const CONNECTIONS_UPDATE_REFRESH_RATE = 10*time.Second
+const CONNECTIONS_UPDATE_REFRESH_RATE = 10 * time.Second
 
 type Client struct {
-	userIP          string
-	clientsIPs      map[string]bool					// clientIP : status
+	userIP     string
+	clientsIPs map[string]bool // clientIP : status
 	// not in use rn
 	clientsSockets      map[rsocket.Client]string       // socket : clientIP
 	chatList            map[string]*chat.Chat           // chatID, *Chat
 	sendDataList        map[string]chan payload.Payload // payload and target chat format: map[clientIP] payload(message, chatID)
 	receivedPayloadChan chan payload.Payload            // channel with all incoming payloads
 
-	secretKey 		string							// used for authentication
+	secretKey string // used for authentication
 }
 
 // return new User
@@ -66,20 +66,19 @@ func NewUser() *Client {
 		log.Println("NewUser: obtained predefined addr = " + userAddr)
 	}
 
-
 	// init channels
-	_clientsIPs     := make(map[string]bool)
+	_clientsIPs := make(map[string]bool)
 	_clientsSockets := make(map[rsocket.Client]string)
-	_chatList       := make(map[string]*chat.Chat)
-	_sendMessageList:= make(map[string]chan payload.Payload)
+	_chatList := make(map[string]*chat.Chat)
+	_sendMessageList := make(map[string]chan payload.Payload)
 	_receivedPayloadChan := make(chan payload.Payload)
 
 	return &Client{
-		userIP:         userAddr,
-		clientsIPs:     _clientsIPs,
-		clientsSockets: _clientsSockets,
-		chatList:       _chatList,
-		sendDataList:   _sendMessageList,
+		userIP:              userAddr,
+		clientsIPs:          _clientsIPs,
+		clientsSockets:      _clientsSockets,
+		chatList:            _chatList,
+		sendDataList:        _sendMessageList,
 		receivedPayloadChan: _receivedPayloadChan,
 	}
 }
@@ -129,22 +128,21 @@ func (c *Client) createChat(initList []string) {
 	// create map of adv statuses
 	tmpAdList := initList
 
-
 	// do while chat is not adv to all clients
 	go func() {
-	for {
-		for i, addr := range tmpAdList {
-			if status := c.clientsIPs[addr]; status {
-				// TODO advert chat
+		for {
+			for i, addr := range tmpAdList {
+				if status := c.clientsIPs[addr]; status {
+					// TODO advert chat
 
-				// delete record
-				tmpAdList = append(tmpAdList[:i], tmpAdList[i+1:]...)
+					// delete record
+					tmpAdList = append(tmpAdList[:i], tmpAdList[i+1:]...)
+				}
+			}
+			if len(tmpAdList) == 0 {
+				break
 			}
 		}
-		if len(tmpAdList) == 0 {
-			break
-		}
-	}
 	}()
 }
 
@@ -195,7 +193,7 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 	// TODO change literals to constants
 	cli, err := rsocket.
 		Connect().
-		SetupPayload(payload.NewString(c.userIP,"1234")).
+		SetupPayload(payload.NewString(c.userIP, "1234")).
 		Resume().
 		Fragment(1024).
 		Transport(addr).
@@ -306,7 +304,7 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 
 // payloads:
 // CHAT_MESSAGE
-//
+// CHAT_PARTICIPANTS_REQUEST: {chatID, {source, type}}
 
 // helper, handling all incoming messages from each connection
 func (c *Client) recivedPayloadHandler() {
@@ -320,14 +318,18 @@ func (c *Client) recivedPayloadHandler() {
 			panic(err)
 		}
 
+		// TODO add authentication process for request (client not participating in chat can get its participants)
+
 		// TODO implement me
 		switch metadata["type"].(string) {
 		case "CHAT_MESSAGE":
 			return
 		case "CHAT_PARTICIPANTS_REQUEST":
-			return
+			for _, addr := range c.chatList[payl.DataUTF8()].ClientsIPsList() {
+				tmpSendPayl := payload.New([]byte(addr), []byte(`{"source":"`+c.userIP+`", "type":"CHAT_PARTICIPANTS_RESPONSE"}`))
+				c.sendDataList[metadata["source"].(string)] <- tmpSendPayl
+			}
 		}
-
 
 	}
 }
