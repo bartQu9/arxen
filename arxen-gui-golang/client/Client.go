@@ -125,25 +125,28 @@ func (c *Client) createChat(initList []string) {
 
 	c.chatList[chatIDstr] = tmpChat
 
+	// CODE BELOW NOT NEEDED;
+	// TODO REMOVE IN FUTURE
 	// create map of adv statuses
-	tmpAdList := initList
+	//tmpAdList := initList
 
-	// do while chat is not adv to all clients
-	go func() {
-		for {
-			for i, addr := range tmpAdList {
-				if status := c.clientsIPs[addr]; status {
-					// TODO advert chat
+	/*
+		// do while chat is not adv to all clients
 
-					// delete record
-					tmpAdList = append(tmpAdList[:i], tmpAdList[i+1:]...)
+		go func() {
+			for {
+				for i, addr := range tmpAdList {
+					if status := c.clientsIPs[addr]; status {
+						// delete record
+						tmpAdList = append(tmpAdList[:i], tmpAdList[i+1:]...)
+					}
+				}
+				if len(tmpAdList) == 0 {
+					break
 				}
 			}
-			if len(tmpAdList) == 0 {
-				break
-			}
-		}
-	}()
+		}()
+	*/
 }
 
 // handler of all connections across itself and other clients
@@ -303,12 +306,14 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 }
 
 // payloads:
-// CHAT_MESSAGE
+// CHAT_MESSAGE:			  {message,{source, type, chatID}}
 // CHAT_PARTICIPANTS_REQUEST: {chatID, {source, type}}
 
 // helper, handling all incoming messages from each connection
-func (c *Client) recivedPayloadHandler() {
+func (c *Client) receivedPayloadHandler() {
+	// this "for" is basically onNext()
 	for payl := range c.receivedPayloadChan {
+
 		// read message data/metadata
 		// based on input do something
 		metaByteJson, _ := payl.Metadata()
@@ -320,22 +325,55 @@ func (c *Client) recivedPayloadHandler() {
 
 		// TODO add authentication process for request (client not participating in chat can get its participants)
 
-		// TODO implement me
+		// TODO implement me till the end
 		switch metadata["type"].(string) {
-		case "CHAT_MESSAGE":
-			return
+		case CHAT_MESSAGE:
+			// TODO handle incoming messages
 		case CHAT_PARTICIPANTS_REQUEST:
+			// send all participating clients IPs to requester
 			for _, addr := range c.chatList[payl.DataUTF8()].ClientsIPsList() {
 				tmpSendPayl := payload.New([]byte(addr), c.getMetadataTag(CHAT_PARTICIPANTS_RESPONSE))
 				c.sendDataList[metadata["source"].(string)] <- tmpSendPayl
 			}
+		case CHAT_ADVERT_REQUEST:
+			// phantom request
+			// should work :/
+			for _, addr := range c.chatList[payl.DataUTF8()].ClientsIPsList() {
+				// check if corresponding chan exists
+				if c.sendDataList[addr] == nil {
+					log.Println("receivedPayloadHandler: chan non existing - creating ", addr)
+					ch := make(chan payload.Payload)
+					c.sendDataList[addr] = ch
+				}
+				// send to each chan CHAT_ADVERT
+				c.sendDataList[addr] <- payload.New(payl.Data(), c.getMetadataTag(CHAT_ADVERT))
+			}
+
 		}
 
 	}
 }
 
 // function returning metadata for payload
-// comType: type of request/response to be generated
-func (c *Client) getMetadataTag(comType string) []byte {
-	return []byte(`{"source":"` + c.userIP + `", "type":"` + comType + `"}`)
+// args:
+// args[0]: type of request/response to be generated
+// args[1:]: extra arguments:
+func (c *Client) getMetadataTag(args ...string) []byte {
+	switch args[0] {
+	case CHAT_PARTICIPANTS_RESPONSE:
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `"}`)
+	case CHAT_MESSAGE:
+		// args[1]: chatID
+		if len(args) < 2 {
+			panic("getMetadataTag: Too few arguments")
+		}
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `", "chatID":"` + args[1] + `"}`)
+	case CHAT_ADVERT_REQUEST:
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `"}`)
+	case CHAT_ADVERT:
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `"}`)
+	default:
+		log.Fatalln("getMetadataTag: Bad message type")
+		return nil
+	}
 }

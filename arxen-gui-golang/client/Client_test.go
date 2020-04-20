@@ -52,7 +52,7 @@ func TestClient_recivedPayloadHandler(t *testing.T) {
 
 			data01 := payload.New([]byte(`123`), []byte(`{"source":"`+tt.source+`", "type":"CHAT_PARTICIPANTS_REQUEST"}`))
 
-			go c.recivedPayloadHandler()
+			go c.receivedPayloadHandler()
 
 			c.receivedPayloadChan <- data01
 
