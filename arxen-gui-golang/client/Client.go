@@ -324,12 +324,18 @@ func (c *Client) recivedPayloadHandler() {
 		switch metadata["type"].(string) {
 		case "CHAT_MESSAGE":
 			return
-		case "CHAT_PARTICIPANTS_REQUEST":
+		case CHAT_PARTICIPANTS_REQUEST:
 			for _, addr := range c.chatList[payl.DataUTF8()].ClientsIPsList() {
-				tmpSendPayl := payload.New([]byte(addr), []byte(`{"source":"`+c.userIP+`", "type":"CHAT_PARTICIPANTS_RESPONSE"}`))
+				tmpSendPayl := payload.New([]byte(addr), c.getMetadataTag(CHAT_PARTICIPANTS_RESPONSE))
 				c.sendDataList[metadata["source"].(string)] <- tmpSendPayl
 			}
 		}
 
 	}
+}
+
+// function returning metadata for payload
+// comType: type of request/response to be generated
+func (c *Client) getMetadataTag(comType string) []byte {
+	return []byte(`{"source":"` + c.userIP + `", "type":"` + comType + `"}`)
 }
