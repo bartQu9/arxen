@@ -22,19 +22,22 @@ func TestClient_receivedPayloadHandler(t *testing.T) {
 		secretKey           string
 	}
 	tests := []struct {
-		name   string
-		source string
-		fields fields
+		name     string
+		source   string
+		fields   fields
+		initList []string
 	}{
 		{"test_CHAT_PARTICIPANTS_REQUEST",
-			"tcp://10.5.0.2:7878",
+			"2",
 			fields{
 				userIP:              "tcp://10.5.0.3:7878",
 				receivedPayloadChan: make(chan payload.Payload),
 				sendDataList:        make(map[string]chan payload.Payload),
 				clientsIPs:          make(map[string]bool),
 				chatList:            make(map[string]*chat.Chat),
-			}},
+			},
+			[]string{"1", "2", "3", "4"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -48,14 +51,19 @@ func TestClient_receivedPayloadHandler(t *testing.T) {
 				secretKey:           tt.fields.secretKey,
 			}
 
-			c.createChat([]string{"1", "2", "3", "4"})
+			go c.receivedPayloadHandler()
 
-			ch := make(chan payload.Payload)
-			c.sendDataList[tt.source] = ch
+			// tmp solution
+			for _, addr := range tt.initList {
+				ch := make(chan payload.Payload, 5)
+				c.sendDataList[addr] = ch
+			}
+
+			go c.createChat(tt.initList)
+
+			time.Sleep(10 * time.Millisecond)
 
 			data01 := payload.New([]byte(`123`), []byte(`{"source":"`+tt.source+`", "type":"CHAT_PARTICIPANTS_REQUEST"}`))
-
-			go c.receivedPayloadHandler()
 
 			c.receivedPayloadChan <- data01
 
@@ -70,7 +78,7 @@ func TestClient_receivedPayloadHandler(t *testing.T) {
 
 			resp := payload.New([]byte(`2`), []byte(`{"source":"`+c.userIP+`", "type":"CHAT_PARTICIPANTS_RESPONSE"}`))
 
-			if rcvData02[1].DataUTF8() != resp.DataUTF8() {
+			if rcvData02[2].DataUTF8() != resp.DataUTF8() {
 				t.Errorf("Test failed: \"%v\" is not equal to \"%v\"", rcvData02[1], payload.New([]byte("2"),
 					[]byte(`{"source":"`+c.userIP+`", "type":"CHAT_PARTICIPANTS_RESPONSE"}`)))
 			}

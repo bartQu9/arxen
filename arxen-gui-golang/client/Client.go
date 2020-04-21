@@ -347,6 +347,7 @@ func (c *Client) receivedPayloadHandler() {
 					// check if corresponding chan exists
 					if c.sendDataList[addr] == nil {
 						log.Println("receivedPayloadHandler: chan non existing - creating ", addr)
+						// tmp solution
 						ch := make(chan payload.Payload)
 						c.sendDataList[addr] = ch
 					}
@@ -354,7 +355,8 @@ func (c *Client) receivedPayloadHandler() {
 					c.sendDataList[addr] <- payload.New(payl.Data(), c.getMetadataTag(CHAT_ADVERT))
 				}
 			}
-
+		case CHAT_ADVERT:
+			// TODO implement me
 		}
 
 	}
