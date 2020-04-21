@@ -1,7 +1,7 @@
 FROM golang:1.14.0-alpine
 
 # TODO fix dockerfile
-LABEL maintainer="Noone"
+LABEL maintainer="arxen_dev"
 
 ENV GO111MODULE=on
 ENV PORT=8000
@@ -23,6 +23,3 @@ EXPOSE 8000
 
 # Command to run the executable
 CMD ["./main"]
-
-
-#CMD ["ping", "1.1.1.1"]

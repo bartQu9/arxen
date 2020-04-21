@@ -44,7 +44,8 @@ type Client struct {
 	sendDataList        map[string]chan payload.Payload // payload and target chat format: map[clientIP] payload(message, chatID)
 	receivedPayloadChan chan payload.Payload            // channel with all incoming payloads
 
-	secretKey string // used for authentication
+	friendsList map[string]Friend // map[friendsNick]Friend
+	secretKey   string            // used for authentication
 }
 
 // return new User
@@ -124,6 +125,9 @@ func (c *Client) createChat(initList []string) {
 	}
 
 	c.chatList[chatIDstr] = tmpChat
+
+	// advert new chat
+	c.receivedPayloadChan <- payload.New([]byte(chatIDstr), c.getMetadataTag(CHAT_ADVERT_REQUEST))
 
 	// CODE BELOW NOT NEEDED;
 	// TODO REMOVE IN FUTURE
@@ -339,14 +343,16 @@ func (c *Client) receivedPayloadHandler() {
 			// phantom request
 			// should work :/
 			for _, addr := range c.chatList[payl.DataUTF8()].ClientsIPsList() {
-				// check if corresponding chan exists
-				if c.sendDataList[addr] == nil {
-					log.Println("receivedPayloadHandler: chan non existing - creating ", addr)
-					ch := make(chan payload.Payload)
-					c.sendDataList[addr] = ch
+				if addr != c.userIP {
+					// check if corresponding chan exists
+					if c.sendDataList[addr] == nil {
+						log.Println("receivedPayloadHandler: chan non existing - creating ", addr)
+						ch := make(chan payload.Payload)
+						c.sendDataList[addr] = ch
+					}
+					// send to each chan CHAT_ADVERT
+					c.sendDataList[addr] <- payload.New(payl.Data(), c.getMetadataTag(CHAT_ADVERT))
 				}
-				// send to each chan CHAT_ADVERT
-				c.sendDataList[addr] <- payload.New(payl.Data(), c.getMetadataTag(CHAT_ADVERT))
 			}
 
 		}
