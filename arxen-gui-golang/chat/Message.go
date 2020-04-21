@@ -8,25 +8,22 @@ import (
 // universal interface for messages
 type Message interface {
 	MessageToPayload() payload.Payload
+	MessageToJsonString() string
 }
 
 // text type message
 type TextMessage struct {
-	data string
-	author string
-	timestamp time.Time
+	Data      string
+	Author    string
+	Timestamp time.Time
 }
 
 // TODO implement me
 func (t *TextMessage) MessageToPayload() payload.Payload {
-	return payload.NewString("","")
+	return payload.NewString("", "")
 }
 
-
-func (t *TextMessage) Data() string {
-	return t.data
-}
-
-func (t *TextMessage) SetData(data string) {
-	t.data = data
+// TODO implement me
+func (t *TextMessage) MessageToJsonString() string {
+	return ""
 }

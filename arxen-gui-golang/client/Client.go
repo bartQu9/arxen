@@ -8,11 +8,15 @@ import (
 	"github.com/rsocket/rsocket-go/rx"
 	"github.com/rsocket/rsocket-go/rx/flux"
 	"github.com/rsocket/rsocket-go/rx/mono"
+	"html/template"
 	"log"
 	"main/chat"
 	"net"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -48,23 +52,23 @@ type Client struct {
 	secretKey   string            // used for authentication
 }
 
-// return new User
-func NewUser() *Client {
+// return new Client
+func NewClient() *Client {
 	// default port
 	userAddr := "tcp://127.0.0.2:7878"
 
 	// if everything is ok set userAddr as local IP
 	if _userAddr, ok := GetOutboundIP(); ok {
 		userAddr = "tcp://" + _userAddr.String() + ":7878"
-		log.Println("NewUser: IP address = " + userAddr)
+		log.Println("NewClient: IP address = " + userAddr)
 	} else {
-		log.Println("NewUser: cannot obtain local IP address!")
+		log.Println("NewClient: cannot obtain local IP address!")
 	}
 
 	// if there is env variable -> set clients ip to it
 	if value, ok := os.LookupEnv("USER_ADDR"); ok {
 		userAddr = value
-		log.Println("NewUser: obtained predefined addr = " + userAddr)
+		log.Println("NewClient: obtained predefined addr = " + userAddr)
 	}
 
 	// init channels
@@ -384,4 +388,99 @@ func (c *Client) getMetadataTag(args ...string) []byte {
 		log.Fatalln("getMetadataTag: Bad message type")
 		return nil
 	}
+}
+
+// --------------------------------------------------------
+// web part
+// --------------------------------------------------------
+
+const localServerAddress = "127.0.0.1:7879"
+
+type templateHandler struct {
+	once     sync.Once
+	filename string
+	templ    *template.Template
+	data     map[string]interface{}
+}
+
+func (t *templateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t.once.Do(func() {
+		t.templ = template.Must(template.ParseFiles(filepath.Join("templates", t.filename)))
+	})
+
+	//data := map[string]interface{}{
+	//	"Host": r.Host,
+	//}
+
+	t.templ.Execute(w, t.data)
+}
+
+func (c *Client) HttpServer() {
+	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		// TODO implement me
+	})
+	http.Handle("/fixme", &templateHandler{filename: "chat.html"})
+	http.HandleFunc("/room/", func(writer http.ResponseWriter, request *http.Request) {
+		segs := strings.Split(request.URL.Path, "/")
+		urlChatID := segs[len(segs)-1]
+
+		if c.chatList[urlChatID] == nil {
+			writer.WriteHeader(http.StatusBadRequest)
+			// TODO better handle error
+			log.Fatalln("Bad URL: chat seems to not exist")
+			// panic("Bad URL")
+		}
+
+		c.chatList[urlChatID].ServeHTTP(writer, request)
+
+	})
+	http.HandleFunc("/chat/", func(writer http.ResponseWriter, request *http.Request) {
+		segs := strings.Split(request.URL.Path, "/")
+		urlChatID := segs[len(segs)-1]
+
+		if c.chatList[urlChatID] == nil {
+			writer.WriteHeader(http.StatusBadRequest)
+			// TODO better handle error
+			log.Fatalln("Bad URL: chat seems to not exist")
+			// panic("Bad URL")
+		}
+
+		tmpH := templateHandler{
+			filename: "templates/chat.html",
+			data: map[string]interface{}{
+				"Host":   request.Host,
+				"ChatID": urlChatID,
+			},
+		}
+
+		tmpH.ServeHTTP(writer, request)
+
+		//c.chatList[urlChatID].ServeHTTP(writer,request)
+
+	})
+
+	// start the web server
+	log.Println("Starting web server on", localServerAddress)
+	if err := http.ListenAndServe(localServerAddress, nil); err != nil {
+		log.Fatal("ListenAndServe:", err)
+	}
+}
+
+// TEST SETUP
+
+func (c *Client) TestSetup() {
+	// necessary setup
+	go c.connectionsHandler()
+	go c.receivedPayloadHandler()
+	go c.eventListener()
+
+	participants := []string{"tcp://127.0.0.3:7878"}
+
+	if value, ok := os.LookupEnv("SAMPLE_CHAT_SETUP_ADDR"); ok {
+		participants = strings.Split(value, ",")
+		log.Println("TestSetup: chat setup/ connect to = " + participants[0])
+	}
+
+	c.createChat(participants)
+
 }

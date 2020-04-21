@@ -1,25 +1,94 @@
 package chat
 
 import (
+	"github.com/gorilla/websocket"
 	"github.com/rsocket/rsocket-go/payload"
 	"github.com/rsocket/rsocket-go/rx/flux"
+	"log"
+	"net/http"
+	"time"
 )
 
 type Chat struct {
-	chatID         string
+
+	// UUID for chat
+	chatID string
+
+	// list of all participating in chat Clients
 	clientsIPsList []string
-	MessagesChan   chan payload.Payload
-	listiner       interface{}
-	f              flux.Flux
+
+	// all messages within the chat goes here
+	MessagesChan chan payload.Payload
+
+	// messages sent by Client goes here
+	sendMessageChan chan payload.Payload
+
+	listiner interface{}
+	f        flux.Flux
+
+	// socket connected with to frontend
+	socket *websocket.Conn
 }
+
+// TODO add logic for adding clients from friends list
 
 // Create new chat
 // args - chatID: ID of chat (numeric string); clientsIPsList: list of other participants addresses (list of strings)
 //
 func NewChat(chatID string, clientsIPsList []string) *Chat {
-	return &Chat{chatID: chatID, clientsIPsList: clientsIPsList, MessagesChan: make(chan payload.Payload)}
+	return &Chat{chatID: chatID, clientsIPsList: clientsIPsList, MessagesChan: make(chan payload.Payload), sendMessageChan: make(chan payload.Payload)}
 }
 
 func (c Chat) ClientsIPsList() []string {
 	return c.clientsIPsList
+}
+
+func (c *Chat) stopChat() {}
+
+const (
+	socketBufferSize  = 1024
+	messageBufferSize = 256
+)
+
+var upgrader = &websocket.Upgrader{ReadBufferSize: socketBufferSize, WriteBufferSize: socketBufferSize}
+
+func (c *Chat) read() {
+	defer c.socket.Close()
+	for {
+		var msg *TextMessage
+		err := c.socket.ReadJSON(&msg)
+		if err != nil {
+			return
+		}
+		msg.Timestamp = time.Now()
+		// TODO solve stamping messages with author
+		msg.Author = "tmp_solution"
+		// to payload
+		c.sendMessageChan <- msg.MessageToPayload()
+	}
+}
+
+func (c *Chat) write() {
+	defer c.socket.Close()
+	for msg := range c.MessagesChan {
+		// TODO fix me properly
+		err := c.socket.WriteJSON(msg.Data())
+		if err != nil {
+			return
+		}
+	}
+}
+
+// probably removed in future commits
+func (c *Chat) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	socket, err := upgrader.Upgrade(w, req, nil)
+	c.socket = socket // no idea if it works actually
+	if err != nil {
+		log.Fatal("ServeHTTP:", err)
+		return
+	}
+
+	defer func() { c.stopChat() }()
+	go c.write()
+	c.read()
 }
