@@ -483,4 +483,7 @@ func (c *Client) TestSetup() {
 
 	c.createChat(participants)
 
+
+	time.Sleep(3*time.Minute)
+
 }

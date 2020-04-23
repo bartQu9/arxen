@@ -22,4 +22,5 @@ EXPOSE 80
 EXPOSE 8000
 
 # Command to run the executable
-CMD ["./main"]
+# CMD ["./main"]
+CMD ["pwd"]

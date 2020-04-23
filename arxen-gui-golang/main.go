@@ -6,4 +6,6 @@ func main() {
 	cli := client.NewClient()
 
 	cli.HttpServer()
+
+	cli.TestSetup()
 }
