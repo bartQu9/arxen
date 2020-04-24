@@ -39,7 +39,7 @@
                 return false;
             }
             console.log(msgBox.val());
-            socket.send(JSON.stringify({"Message": msgBox.val()}));
+            socket.send(JSON.stringify({"Data": msgBox.val()}));
             msgBox.val("");
             return false;
 
@@ -56,8 +56,8 @@
                 var msg = JSON.parse(e.data);
                 messages.append(
                     $("<li>").append(
-                        $("<strong>").text(msg.Name + ": "),
-                        $("<span>").text(msg.Message)
+                        $("<strong>").text(msg.Author + ": "),
+                        $("<span>").text(msg.Data)
                     )
                 );
             }

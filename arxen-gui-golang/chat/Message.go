@@ -27,3 +27,13 @@ func (t *TextMessage) MessageToPayload() payload.Payload {
 func (t *TextMessage) MessageToJsonString() string {
 	return ""
 }
+
+// returns new TextMessage based on payload
+func PayloadToTextMessage(payl payload.Payload) *TextMessage {
+	// TODO implement me
+	return &TextMessage{
+		Data:      payl.DataUTF8(),
+		Author:    "tmp",
+		Timestamp: time.Now(),
+	}
+}

@@ -390,6 +390,8 @@ func (c *Client) chatMessagesHandler(chat *chat.Chat) {
 		// forward to oneself
 		c.receivedPayloadChan <- payloadMessage
 
+		log.Println("chatMessagesHandler: Message to be send: ", payloadMessage)
+
 		// forward to all connected hosts
 		for _, clientIP := range  chat.ClientsIPsList() {
 			if clientIP != c.userIP {

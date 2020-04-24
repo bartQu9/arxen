@@ -81,6 +81,7 @@ func (c *Chat) read() {
 		}
 		msg.Timestamp = time.Now()
 		msg.Author = "tmp"
+		log.Println("read(): Got Message from Websocket ", *msg)
 		c.SendMessageChan <- *msg
 	}
 }
@@ -89,7 +90,10 @@ func (c *Chat) write() {
 	defer c.socket.Close()
 	for msg := range c.MessagesChan {
 		// TODO fix me properly
-		err := c.socket.WriteJSON(msg.Data())
+		// implement proper type transition
+		log.Println("write(): message to be written: ", msg)
+		//err := c.socket.WriteJSON("{\"Data\":\""+msg.DataUTF8()+"\",\"Author\":\""+"TBD"+"\"}")
+		err := c.socket.WriteJSON(PayloadToTextMessage(msg))
 		if err != nil {
 			return
 		}
