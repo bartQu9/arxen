@@ -128,6 +128,8 @@ func (c *Client) createChat(initList []string) {
 		c.clientsIPs[cli] = false
 	}
 
+	go c.chatMessagesHandler(tmpChat)
+
 	c.chatList[chatIDstr] = tmpChat
 
 	// advert new chat
@@ -298,9 +300,14 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 
 				// TODO sort messages
 
+				log.Println(input)
+
+				// TODO FIX ME ERROR HERE: "runtime error: invalid memory address or nil pointer dereference"
 				log.Println("GOT MESSAGE: ", input.DataUTF8())
-				tmpChatID, _ := input.MetadataUTF8()
-				c.chatList[tmpChatID].MessagesChan <- input
+				// tmpChatID, _ := input.MetadataUTF8()
+				// c.chatList[tmpChatID].MessagesChan <- input
+
+				c.receivedPayloadChan <- input
 			}))
 
 			return flux.Create(func(ctx context.Context, s flux.Sink) {
@@ -337,6 +344,12 @@ func (c *Client) receivedPayloadHandler() {
 		switch metadata["type"].(string) {
 		case CHAT_MESSAGE:
 			// TODO handle incoming messages
+			// the source
+			// authentication
+			if dest := metadata["chatID"]; dest != nil {
+				// send to appropriate chat
+				c.chatList[dest.(string)].MessagesChan <- payl
+			}
 		case CHAT_PARTICIPANTS_REQUEST:
 			// send all participating clients IPs to requester
 			for _, addr := range c.chatList[payl.DataUTF8()].ClientsIPsList() {
@@ -363,6 +376,26 @@ func (c *Client) receivedPayloadHandler() {
 			// TODO implement me
 		}
 
+	}
+}
+
+// handles forwarding messages from particular chat
+func (c *Client) chatMessagesHandler(chat *chat.Chat) {
+	for newMessageToBeSend := range chat.SendMessageChan {
+		// transform message
+
+		// TODO add rest message metadata
+		payloadMessage := payload.New([]byte(newMessageToBeSend.Data), c.getMetadataTag(CHAT_MESSAGE,chat.ChatID))
+
+		// forward to oneself
+		c.receivedPayloadChan <- payloadMessage
+
+		// forward to all connected hosts
+		for _, clientIP := range  chat.ClientsIPsList() {
+			if clientIP != c.userIP {
+				c.sendDataList[clientIP] <- payloadMessage
+			}
+		}
 	}
 }
 
@@ -394,7 +427,7 @@ func (c *Client) getMetadataTag(args ...string) []byte {
 // web part
 // --------------------------------------------------------
 
-const localServerAddress = "127.0.0.1:7879"
+const localServerAddress = ":7879"
 
 type templateHandler struct {
 	once     sync.Once
@@ -418,6 +451,7 @@ func (t *templateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (c *Client) HttpServer() {
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 		// TODO implement me
+		writer.Write([]byte(`Hello TODZIALA`))
 	})
 	http.Handle("/fixme", &templateHandler{filename: "chat.html"})
 	http.HandleFunc("/room/", func(writer http.ResponseWriter, request *http.Request) {
@@ -446,8 +480,9 @@ func (c *Client) HttpServer() {
 		}
 
 		tmpH := templateHandler{
-			filename: "templates/chat.html",
+			filename: "chat.html",
 			data: map[string]interface{}{
+				"ClientIP": c.userIP,
 				"Host":   request.Host,
 				"ChatID": urlChatID,
 			},

@@ -12,7 +12,7 @@ import (
 type Chat struct {
 
 	// UUID for chat
-	chatID string
+	ChatID string
 
 	// list of all participating in chat Clients
 	clientsIPsList []string
@@ -21,7 +21,7 @@ type Chat struct {
 	MessagesChan chan payload.Payload
 
 	// messages sent by Client goes here
-	sendMessageChan chan payload.Payload
+	SendMessageChan chan TextMessage
 
 	listiner interface{}
 	f        flux.Flux
@@ -33,10 +33,10 @@ type Chat struct {
 // TODO add logic for adding clients from friends list
 
 // Create new chat
-// args - chatID: ID of chat (numeric string); clientsIPsList: list of other participants addresses (list of strings)
+// args - ChatID: ID of chat (numeric string); clientsIPsList: list of other participants addresses (list of strings)
 //
 func NewChat(chatID string, clientsIPsList []string) *Chat {
-	return &Chat{chatID: chatID, clientsIPsList: clientsIPsList, MessagesChan: make(chan payload.Payload), sendMessageChan: make(chan payload.Payload)}
+	return &Chat{ChatID: chatID, clientsIPsList: clientsIPsList, MessagesChan: make(chan payload.Payload), SendMessageChan: make(chan TextMessage)}
 }
 
 func (c Chat) ClientsIPsList() []string {
@@ -55,16 +55,33 @@ var upgrader = &websocket.Upgrader{ReadBufferSize: socketBufferSize, WriteBuffer
 func (c *Chat) read() {
 	defer c.socket.Close()
 	for {
+		//var msg *string
+		//
+		//err := c.socket.ReadJSON(&msg)
+		//log.Println("read(): Got Message from Websocket ", *msg)
+		//if err != nil {
+		//	return
+		//}
+		//
+		//msgToSend := TextMessage{
+		//	Data: *msg,
+		//	Timestamp: time.Now(),
+		//	Author: "tmp_solution",
+		//}
+		//// msgToSend.Data = *msg
+		//// msgToSend.Timestamp = time.Now()
+		//// TODO solve stamping messages with author
+		//// msgToSend.Author = "tmp_solution"
+		//// to payload
+		//c.SendMessageChan <- msgToSend
 		var msg *TextMessage
 		err := c.socket.ReadJSON(&msg)
 		if err != nil {
 			return
 		}
 		msg.Timestamp = time.Now()
-		// TODO solve stamping messages with author
-		msg.Author = "tmp_solution"
-		// to payload
-		c.sendMessageChan <- msg.MessageToPayload()
+		msg.Author = "tmp"
+		c.SendMessageChan <- *msg
 	}
 }
 

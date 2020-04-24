@@ -20,7 +20,7 @@ type TextMessage struct {
 
 // TODO implement me
 func (t *TextMessage) MessageToPayload() payload.Payload {
-	return payload.NewString("", "")
+	return payload.New([]byte(t.Data), []byte(`{"Author":"`+t.Author+`","Timestamp":"`+t.Timestamp.String()+`"}`))
 }
 
 // TODO implement me
