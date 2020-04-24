@@ -2,7 +2,6 @@ package chat
 
 import (
 	"github.com/gorilla/websocket"
-	"github.com/rsocket/rsocket-go/payload"
 	"github.com/rsocket/rsocket-go/rx/flux"
 	"log"
 	"net/http"
@@ -18,7 +17,7 @@ type Chat struct {
 	clientsIPsList []string
 
 	// all messages within the chat goes here
-	MessagesChan chan payload.Payload
+	MessagesChan chan TextMessage
 
 	// messages sent by Client goes here
 	SendMessageChan chan TextMessage
@@ -36,7 +35,7 @@ type Chat struct {
 // args - ChatID: ID of chat (numeric string); clientsIPsList: list of other participants addresses (list of strings)
 //
 func NewChat(chatID string, clientsIPsList []string) *Chat {
-	return &Chat{ChatID: chatID, clientsIPsList: clientsIPsList, MessagesChan: make(chan payload.Payload), SendMessageChan: make(chan TextMessage)}
+	return &Chat{ChatID: chatID, clientsIPsList: clientsIPsList, MessagesChan: make(chan TextMessage), SendMessageChan: make(chan TextMessage)}
 }
 
 func (c Chat) ClientsIPsList() []string {
@@ -93,7 +92,7 @@ func (c *Chat) write() {
 		// implement proper type transition
 		log.Println("write(): message to be written: ", msg)
 		//err := c.socket.WriteJSON("{\"Data\":\""+msg.DataUTF8()+"\",\"Author\":\""+"TBD"+"\"}")
-		err := c.socket.WriteJSON(PayloadToTextMessage(msg))
+		err := c.socket.WriteJSON(msg)
 		if err != nil {
 			return
 		}

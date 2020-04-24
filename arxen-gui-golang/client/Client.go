@@ -125,7 +125,9 @@ func (c *Client) createChat(initList []string) {
 	// not working if already connected to this user
 	// get all users IP I want to connect
 	for _, cli := range initList {
-		c.clientsIPs[cli] = false
+		if _, ok := c.clientsIPs[cli]; !ok {
+			c.clientsIPs[cli] = false
+		}
 	}
 
 	go c.chatMessagesHandler(tmpChat)
@@ -159,6 +161,30 @@ func (c *Client) createChat(initList []string) {
 	*/
 }
 
+func (c *Client) createSlaveChat(initList []string, chatIDstr string) {
+	// init new chat with complete users list
+	// add userIP ex"tcp://10.5.0.2:7878" to that list
+	tmpChat := chat.NewChat(chatIDstr, append(initList, c.userIP))
+
+	// TODO fix me
+	// go tmpChat.messagePrinter()
+
+	// TODO TMP IMPLEMENTATION WARNING
+	// not working if already connected to this user
+	// get all users IP I want to connect
+	for _, cli := range initList {
+		if _, ok := c.clientsIPs[cli]; !ok {
+			c.clientsIPs[cli] = false
+		}
+	}
+
+	go c.chatMessagesHandler(tmpChat)
+
+	log.Println("createSlaveChat: Created new Chat")
+	c.chatList[chatIDstr] = tmpChat
+
+}
+
 // handler of all connections across itself and other clients
 func (c *Client) connectionsHandler() {
 	for {
@@ -167,14 +193,14 @@ func (c *Client) connectionsHandler() {
 
 		for addr, status := range c.clientsIPs {
 			// if client not connected to particular client try to connect
+			// find if chan for that client exists
+			// TODO can be written better
+			if c.sendDataList[addr] == nil {
+				log.Println("connectionsHandler: chan non existing - creating ", addr)
+				ch := make(chan payload.Payload)
+				c.sendDataList[addr] = ch
+			}
 			if !status {
-				// find if chan for that client exists
-				// TODO can be written better
-				if c.sendDataList[addr] == nil {
-					log.Println("connectionsHandler: chan non existing - creating ", addr)
-					ch := make(chan payload.Payload)
-					c.sendDataList[addr] = ch
-				}
 				go c.connectToClient(c.sendDataList[addr], addr)
 				// after finished update record
 				c.clientsIPs[addr] = true
@@ -194,9 +220,9 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 	// TODO problem: who is the target
 	// TODO add option of sending custom messages
 	f := flux.Create(func(ctx context.Context, s flux.Sink) {
-		log.Println("STARTED sending new message")
+		//log.Println("STARTED sending new message")
 		for mess := range ch {
-			log.Println("SENDING new message")
+			//log.Println("SENDING new message")
 			s.Next(mess)
 		}
 		s.Complete()
@@ -224,8 +250,10 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 	_, err = cli.RequestChannel(f).
 		DoOnNext(func(elem payload.Payload) {
 			log.Println("GOT new message")
-			tmpChatID, _ := elem.MetadataUTF8()
-			c.chatList[tmpChatID].MessagesChan <- elem
+			//tmpChatID, _ := elem.MetadataUTF8()
+			// TODO check if fixed
+			//c.chatList[tmpChatID].MessagesChan <- elem
+			c.receivedPayloadChan <- elem
 		}).
 		BlockLast(context.Background())
 }
@@ -290,8 +318,16 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 
 			c.clientsIPs[setup.DataUTF8()] = true
 
+			if c.sendDataList[setup.DataUTF8()] == nil {
+				log.Println("responder: chan non existing - creating ", setup.DataUTF8())
+				ch := make(chan payload.Payload)
+				c.sendDataList[setup.DataUTF8()] = ch
+			}
+
+			// TODO possibly remove
+
 			// create new chat
-			c.createChat([]string{})
+			//c.createChat([]string{})
 
 			inputs.(flux.Flux).DoFinally(func(s rx.SignalType) {
 				log.Printf("signal type: %v", s)
@@ -341,6 +377,8 @@ func (c *Client) receivedPayloadHandler() {
 		// TODO add authentication process for request (client not participating in chat can get its participants)
 
 		// TODO implement me till the end
+		log.Println("receivedPayloadHandler: INCOMING: ", payl)
+
 		switch metadata["type"].(string) {
 		case CHAT_MESSAGE:
 			// TODO handle incoming messages
@@ -348,14 +386,25 @@ func (c *Client) receivedPayloadHandler() {
 			// authentication
 			if dest := metadata["chatID"]; dest != nil {
 				// send to appropriate chat
-				c.chatList[dest.(string)].MessagesChan <- payl
+				c.chatList[dest.(string)].MessagesChan <- chat.TextMessage{
+					Data:      payl.DataUTF8(),
+					Author:    metadata["source"].(string),
+					Timestamp: time.Now(),
+				}
 			}
 		case CHAT_PARTICIPANTS_REQUEST:
 			// send all participating clients IPs to requester
-			for _, addr := range c.chatList[payl.DataUTF8()].ClientsIPsList() {
-				tmpSendPayl := payload.New([]byte(addr), c.getMetadataTag(CHAT_PARTICIPANTS_RESPONSE))
-				c.sendDataList[metadata["source"].(string)] <- tmpSendPayl
-			}
+			// v1
+			//for _, addr := range c.chatList[payl.DataUTF8()].ClientsIPsList() {
+			//	tmpSendPayl := payload.New([]byte(addr), c.getMetadataTag(CHAT_PARTICIPANTS_RESPONSE))
+			//	c.sendDataList[metadata["source"].(string)] <- tmpSendPayl
+			//}
+			//v2 possible problem is size limit of payload
+			log.Println("receivedPayloadHandler: got new CHAT_PARTICIPANTS_REQUEST")
+			addrString := strings.Join(c.chatList[payl.DataUTF8()].ClientsIPsList(), ",")
+			c.sendDataList[metadata["source"].(string)] <- payload.New([]byte(addrString), c.getMetadataTag(CHAT_PARTICIPANTS_RESPONSE, payl.DataUTF8()))
+			log.Println("receivedPayloadHandler: sending chat CHAT_PARTICIPANTS_RESPONSE")
+
 		case CHAT_ADVERT_REQUEST:
 			// phantom request
 			// should work :/
@@ -373,7 +422,18 @@ func (c *Client) receivedPayloadHandler() {
 				}
 			}
 		case CHAT_ADVERT:
-			// TODO implement me
+			// ask for all participants
+			c.sendDataList[metadata["source"].(string)] <- payload.New(payl.Data(), c.getMetadataTag(CHAT_PARTICIPANTS_REQUEST))
+			log.Println("receivedPayloadHandler: asking by CHAT_PARTICIPANTS_REQUEST")
+
+		case CHAT_PARTICIPANTS_RESPONSE:
+			// create new chat
+			// not ideal solution
+			addrArray := strings.Split(payl.DataUTF8(),",")
+			log.Println("receivedPayloadHandler: beginning creation of new chat")
+			c.createSlaveChat(addrArray, metadata["chatID"].(string))
+		default:
+			log.Println("ERROR! UNSUPPORTED PAYLOAD METADATA TYPE")
 		}
 
 	}
@@ -385,7 +445,7 @@ func (c *Client) chatMessagesHandler(chat *chat.Chat) {
 		// transform message
 
 		// TODO add rest message metadata
-		payloadMessage := payload.New([]byte(newMessageToBeSend.Data), c.getMetadataTag(CHAT_MESSAGE,chat.ChatID))
+		payloadMessage := payload.New([]byte(newMessageToBeSend.Data), c.getMetadataTag(CHAT_MESSAGE, chat.ChatID))
 
 		// forward to oneself
 		c.receivedPayloadChan <- payloadMessage
@@ -393,7 +453,7 @@ func (c *Client) chatMessagesHandler(chat *chat.Chat) {
 		log.Println("chatMessagesHandler: Message to be send: ", payloadMessage)
 
 		// forward to all connected hosts
-		for _, clientIP := range  chat.ClientsIPsList() {
+		for _, clientIP := range chat.ClientsIPsList() {
 			if clientIP != c.userIP {
 				c.sendDataList[clientIP] <- payloadMessage
 			}
@@ -407,8 +467,14 @@ func (c *Client) chatMessagesHandler(chat *chat.Chat) {
 // args[1:]: extra arguments:
 func (c *Client) getMetadataTag(args ...string) []byte {
 	switch args[0] {
-	case CHAT_PARTICIPANTS_RESPONSE:
+	case CHAT_PARTICIPANTS_REQUEST:
 		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `"}`)
+	case CHAT_PARTICIPANTS_RESPONSE:
+		// args[1]: chatID
+		if len(args) < 2 {
+			panic("getMetadataTag: Too few arguments")
+		}
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `","chatID":"` + args[1] + `"}`)
 	case CHAT_MESSAGE:
 		// args[1]: chatID
 		if len(args) < 2 {
@@ -485,8 +551,8 @@ func (c *Client) HttpServer() {
 			filename: "chat.html",
 			data: map[string]interface{}{
 				"ClientIP": c.userIP,
-				"Host":   request.Host,
-				"ChatID": urlChatID,
+				"Host":     request.Host,
+				"ChatID":   urlChatID,
 			},
 		}
 
@@ -519,13 +585,13 @@ func (c *Client) TestSetup() {
 	}
 
 	if value, ok := os.LookupEnv("MAIN_MACHINE"); ok && value == "1" {
-		time.Sleep(5*time.Second)
+		time.Sleep(5 * time.Second)
 		log.Println("Main Machine")
 		c.createChat(participants)
 	} else {
 		log.Println("Second Machine")
 	}
 
-	time.Sleep(3*time.Minute)
+	time.Sleep(3 * time.Minute)
 
 }
