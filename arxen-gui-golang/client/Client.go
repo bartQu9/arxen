@@ -481,8 +481,13 @@ func (c *Client) TestSetup() {
 		log.Println("TestSetup: chat setup/ connect to = " + participants[0])
 	}
 
-	c.createChat(participants)
-
+	if value, ok := os.LookupEnv("MAIN_MACHINE"); ok && value == "1" {
+		time.Sleep(5*time.Second)
+		log.Println("Main Machine")
+		c.createChat(participants)
+	} else {
+		log.Println("Second Machine")
+	}
 
 	time.Sleep(3*time.Minute)
 

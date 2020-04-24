@@ -1,11 +1,14 @@
 package main
 
-import "main/client"
+import (
+	"main/client"
+)
 
 func main() {
 	cli := client.NewClient()
 
-	cli.HttpServer()
-
+	go cli.HttpServer()
+	
 	cli.TestSetup()
+
 }

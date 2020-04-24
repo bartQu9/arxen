@@ -16,11 +16,16 @@ ADD go.mod .
 ADD go.sum .
 RUN go mod download
 
-RUN go build -o main .
+#RUN go build -o main .
+
+RUN go build -o /app/main.out .
 
 EXPOSE 80
 EXPOSE 8000
+EXPOSE 7878
+EXPOSE 7879
 
 # Command to run the executable
-# CMD ["./main"]
-CMD ["pwd"]
+CMD ["./main.out"]
+# RUN cd arxen-gui-golang
+#CMD ["ls", "/app", "-la"]
