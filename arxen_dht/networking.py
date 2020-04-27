@@ -1,7 +1,6 @@
 import socket
 import threading
 import queue
-from time import time
 
 from logging import debug, info, warning, error
 
@@ -93,8 +92,6 @@ class SockHandler:
 
 
 
-
-
 class NetworkHandler:
     class Task:
         def __init__(self, task_type, in_data, out_data, flags=None):
@@ -110,3 +107,4 @@ class NetworkHandler:
     def run(self):
         # get tasks from task queue e.g. send()..
         pass
+

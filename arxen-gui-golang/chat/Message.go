@@ -8,25 +8,32 @@ import (
 // universal interface for messages
 type Message interface {
 	MessageToPayload() payload.Payload
+	MessageToJsonString() string
 }
 
 // text type message
 type TextMessage struct {
-	data string
-	author string
-	timestamp time.Time
+	Data      string
+	Author    string
+	Timestamp time.Time
 }
 
 // TODO implement me
 func (t *TextMessage) MessageToPayload() payload.Payload {
-	return payload.NewString("","")
+	return payload.New([]byte(t.Data), []byte(`{"Author":"`+t.Author+`","Timestamp":"`+t.Timestamp.String()+`"}`))
 }
 
-
-func (t *TextMessage) Data() string {
-	return t.data
+// TODO implement me
+func (t *TextMessage) MessageToJsonString() string {
+	return ""
 }
 
-func (t *TextMessage) SetData(data string) {
-	t.data = data
+// returns new TextMessage based on payload
+func PayloadToTextMessage(payl payload.Payload) *TextMessage {
+	// TODO implement me
+	return &TextMessage{
+		Data:      payl.DataUTF8(),
+		Author:    "tmp",
+		Timestamp: time.Now(),
+	}
 }

@@ -8,11 +8,15 @@ import (
 	"github.com/rsocket/rsocket-go/rx"
 	"github.com/rsocket/rsocket-go/rx/flux"
 	"github.com/rsocket/rsocket-go/rx/mono"
+	"html/template"
 	"log"
 	"main/chat"
 	"net"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -44,26 +48,27 @@ type Client struct {
 	sendDataList        map[string]chan payload.Payload // payload and target chat format: map[clientIP] payload(message, chatID)
 	receivedPayloadChan chan payload.Payload            // channel with all incoming payloads
 
-	secretKey string // used for authentication
+	friendsList map[string]Friend // map[friendsNick]Friend
+	secretKey   string            // used for authentication
 }
 
-// return new User
-func NewUser() *Client {
+// return new Client
+func NewClient() *Client {
 	// default port
 	userAddr := "tcp://127.0.0.2:7878"
 
 	// if everything is ok set userAddr as local IP
 	if _userAddr, ok := GetOutboundIP(); ok {
 		userAddr = "tcp://" + _userAddr.String() + ":7878"
-		log.Println("NewUser: IP address = " + userAddr)
+		log.Println("NewClient: IP address = " + userAddr)
 	} else {
-		log.Println("NewUser: cannot obtain local IP address!")
+		log.Println("NewClient: cannot obtain local IP address!")
 	}
 
 	// if there is env variable -> set clients ip to it
 	if value, ok := os.LookupEnv("USER_ADDR"); ok {
 		userAddr = value
-		log.Println("NewUser: obtained predefined addr = " + userAddr)
+		log.Println("NewClient: obtained predefined addr = " + userAddr)
 	}
 
 	// init channels
@@ -120,30 +125,64 @@ func (c *Client) createChat(initList []string) {
 	// not working if already connected to this user
 	// get all users IP I want to connect
 	for _, cli := range initList {
-		c.clientsIPs[cli] = false
+		if _, ok := c.clientsIPs[cli]; !ok {
+			c.clientsIPs[cli] = false
+		}
 	}
+
+	go c.chatMessagesHandler(tmpChat)
 
 	c.chatList[chatIDstr] = tmpChat
 
+	// advert new chat
+	c.receivedPayloadChan <- payload.New([]byte(chatIDstr), c.getMetadataTag(CHAT_ADVERT_REQUEST))
+
+	// CODE BELOW NOT NEEDED;
+	// TODO REMOVE IN FUTURE
 	// create map of adv statuses
-	tmpAdList := initList
+	//tmpAdList := initList
 
-	// do while chat is not adv to all clients
-	go func() {
-		for {
-			for i, addr := range tmpAdList {
-				if status := c.clientsIPs[addr]; status {
-					// TODO advert chat
+	/*
+		// do while chat is not adv to all clients
 
-					// delete record
-					tmpAdList = append(tmpAdList[:i], tmpAdList[i+1:]...)
+		go func() {
+			for {
+				for i, addr := range tmpAdList {
+					if status := c.clientsIPs[addr]; status {
+						// delete record
+						tmpAdList = append(tmpAdList[:i], tmpAdList[i+1:]...)
+					}
+				}
+				if len(tmpAdList) == 0 {
+					break
 				}
 			}
-			if len(tmpAdList) == 0 {
-				break
-			}
+		}()
+	*/
+}
+
+func (c *Client) createSlaveChat(initList []string, chatIDstr string) {
+	// init new chat with complete users list
+	// add userIP ex"tcp://10.5.0.2:7878" to that list
+	tmpChat := chat.NewChat(chatIDstr, append(initList, c.userIP))
+
+	// TODO fix me
+	// go tmpChat.messagePrinter()
+
+	// TODO TMP IMPLEMENTATION WARNING
+	// not working if already connected to this user
+	// get all users IP I want to connect
+	for _, cli := range initList {
+		if _, ok := c.clientsIPs[cli]; !ok {
+			c.clientsIPs[cli] = false
 		}
-	}()
+	}
+
+	go c.chatMessagesHandler(tmpChat)
+
+	log.Println("createSlaveChat: Created new Chat")
+	c.chatList[chatIDstr] = tmpChat
+
 }
 
 // handler of all connections across itself and other clients
@@ -154,14 +193,14 @@ func (c *Client) connectionsHandler() {
 
 		for addr, status := range c.clientsIPs {
 			// if client not connected to particular client try to connect
+			// find if chan for that client exists
+			// TODO can be written better
+			if c.sendDataList[addr] == nil {
+				log.Println("connectionsHandler: chan non existing - creating ", addr)
+				ch := make(chan payload.Payload)
+				c.sendDataList[addr] = ch
+			}
 			if !status {
-				// find if chan for that client exists
-				// TODO can be written better
-				if c.sendDataList[addr] == nil {
-					log.Println("connectionsHandler: chan non existing - creating ", addr)
-					ch := make(chan payload.Payload)
-					c.sendDataList[addr] = ch
-				}
 				go c.connectToClient(c.sendDataList[addr], addr)
 				// after finished update record
 				c.clientsIPs[addr] = true
@@ -181,9 +220,9 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 	// TODO problem: who is the target
 	// TODO add option of sending custom messages
 	f := flux.Create(func(ctx context.Context, s flux.Sink) {
-		log.Println("STARTED sending new message")
+		//log.Println("STARTED sending new message")
 		for mess := range ch {
-			log.Println("SENDING new message")
+			//log.Println("SENDING new message")
 			s.Next(mess)
 		}
 		s.Complete()
@@ -211,8 +250,10 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 	_, err = cli.RequestChannel(f).
 		DoOnNext(func(elem payload.Payload) {
 			log.Println("GOT new message")
-			tmpChatID, _ := elem.MetadataUTF8()
-			c.chatList[tmpChatID].MessagesChan <- elem
+			//tmpChatID, _ := elem.MetadataUTF8()
+			// TODO check if fixed
+			//c.chatList[tmpChatID].MessagesChan <- elem
+			c.receivedPayloadChan <- elem
 		}).
 		BlockLast(context.Background())
 }
@@ -277,8 +318,16 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 
 			c.clientsIPs[setup.DataUTF8()] = true
 
+			if c.sendDataList[setup.DataUTF8()] == nil {
+				log.Println("responder: chan non existing - creating ", setup.DataUTF8())
+				ch := make(chan payload.Payload)
+				c.sendDataList[setup.DataUTF8()] = ch
+			}
+
+			// TODO possibly remove
+
 			// create new chat
-			c.createChat([]string{})
+			//c.createChat([]string{})
 
 			inputs.(flux.Flux).DoFinally(func(s rx.SignalType) {
 				log.Printf("signal type: %v", s)
@@ -287,9 +336,14 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 
 				// TODO sort messages
 
+				log.Println(input)
+
+				// TODO FIX ME ERROR HERE: "runtime error: invalid memory address or nil pointer dereference"
 				log.Println("GOT MESSAGE: ", input.DataUTF8())
-				tmpChatID, _ := input.MetadataUTF8()
-				c.chatList[tmpChatID].MessagesChan <- input
+				// tmpChatID, _ := input.MetadataUTF8()
+				// c.chatList[tmpChatID].MessagesChan <- input
+
+				c.receivedPayloadChan <- input
 			}))
 
 			return flux.Create(func(ctx context.Context, s flux.Sink) {
@@ -303,12 +357,14 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 }
 
 // payloads:
-// CHAT_MESSAGE
+// CHAT_MESSAGE:			  {message,{source, type, chatID}}
 // CHAT_PARTICIPANTS_REQUEST: {chatID, {source, type}}
 
 // helper, handling all incoming messages from each connection
-func (c *Client) recivedPayloadHandler() {
+func (c *Client) receivedPayloadHandler() {
+	// this "for" is basically onNext()
 	for payl := range c.receivedPayloadChan {
+
 		// read message data/metadata
 		// based on input do something
 		metaByteJson, _ := payl.Metadata()
@@ -320,16 +376,222 @@ func (c *Client) recivedPayloadHandler() {
 
 		// TODO add authentication process for request (client not participating in chat can get its participants)
 
-		// TODO implement me
+		// TODO implement me till the end
+		log.Println("receivedPayloadHandler: INCOMING: ", payl)
+
 		switch metadata["type"].(string) {
-		case "CHAT_MESSAGE":
-			return
-		case "CHAT_PARTICIPANTS_REQUEST":
-			for _, addr := range c.chatList[payl.DataUTF8()].ClientsIPsList() {
-				tmpSendPayl := payload.New([]byte(addr), []byte(`{"source":"`+c.userIP+`", "type":"CHAT_PARTICIPANTS_RESPONSE"}`))
-				c.sendDataList[metadata["source"].(string)] <- tmpSendPayl
+		case CHAT_MESSAGE:
+			// TODO handle incoming messages
+			// the source
+			// authentication
+			if dest := metadata["chatID"]; dest != nil {
+				// send to appropriate chat
+				c.chatList[dest.(string)].MessagesChan <- chat.TextMessage{
+					Data:      payl.DataUTF8(),
+					Author:    metadata["source"].(string),
+					Timestamp: time.Now(),
+				}
 			}
+		case CHAT_PARTICIPANTS_REQUEST:
+			// send all participating clients IPs to requester
+			// v1
+			//for _, addr := range c.chatList[payl.DataUTF8()].ClientsIPsList() {
+			//	tmpSendPayl := payload.New([]byte(addr), c.getMetadataTag(CHAT_PARTICIPANTS_RESPONSE))
+			//	c.sendDataList[metadata["source"].(string)] <- tmpSendPayl
+			//}
+			//v2 possible problem is size limit of payload
+			log.Println("receivedPayloadHandler: got new CHAT_PARTICIPANTS_REQUEST")
+			addrString := strings.Join(c.chatList[payl.DataUTF8()].ClientsIPsList(), ",")
+			c.sendDataList[metadata["source"].(string)] <- payload.New([]byte(addrString), c.getMetadataTag(CHAT_PARTICIPANTS_RESPONSE, payl.DataUTF8()))
+			log.Println("receivedPayloadHandler: sending chat CHAT_PARTICIPANTS_RESPONSE")
+
+		case CHAT_ADVERT_REQUEST:
+			// phantom request
+			// should work :/
+			for _, addr := range c.chatList[payl.DataUTF8()].ClientsIPsList() {
+				if addr != c.userIP {
+					// check if corresponding chan exists
+					if c.sendDataList[addr] == nil {
+						log.Println("receivedPayloadHandler: chan non existing - creating ", addr)
+						// tmp solution
+						ch := make(chan payload.Payload)
+						c.sendDataList[addr] = ch
+					}
+					// send to each chan CHAT_ADVERT
+					c.sendDataList[addr] <- payload.New(payl.Data(), c.getMetadataTag(CHAT_ADVERT))
+				}
+			}
+		case CHAT_ADVERT:
+			// ask for all participants
+			c.sendDataList[metadata["source"].(string)] <- payload.New(payl.Data(), c.getMetadataTag(CHAT_PARTICIPANTS_REQUEST))
+			log.Println("receivedPayloadHandler: asking by CHAT_PARTICIPANTS_REQUEST")
+
+		case CHAT_PARTICIPANTS_RESPONSE:
+			// create new chat
+			// not ideal solution
+			addrArray := strings.Split(payl.DataUTF8(),",")
+			log.Println("receivedPayloadHandler: beginning creation of new chat")
+			c.createSlaveChat(addrArray, metadata["chatID"].(string))
+		default:
+			log.Println("ERROR! UNSUPPORTED PAYLOAD METADATA TYPE")
 		}
 
 	}
+}
+
+// handles forwarding messages from particular chat
+func (c *Client) chatMessagesHandler(chat *chat.Chat) {
+	for newMessageToBeSend := range chat.SendMessageChan {
+		// transform message
+
+		// TODO add rest message metadata
+		payloadMessage := payload.New([]byte(newMessageToBeSend.Data), c.getMetadataTag(CHAT_MESSAGE, chat.ChatID))
+
+		// forward to oneself
+		c.receivedPayloadChan <- payloadMessage
+
+		log.Println("chatMessagesHandler: Message to be send: ", payloadMessage)
+
+		// forward to all connected hosts
+		for _, clientIP := range chat.ClientsIPsList() {
+			if clientIP != c.userIP {
+				c.sendDataList[clientIP] <- payloadMessage
+			}
+		}
+	}
+}
+
+// function returning metadata for payload
+// args:
+// args[0]: type of request/response to be generated
+// args[1:]: extra arguments:
+func (c *Client) getMetadataTag(args ...string) []byte {
+	switch args[0] {
+	case CHAT_PARTICIPANTS_REQUEST:
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `"}`)
+	case CHAT_PARTICIPANTS_RESPONSE:
+		// args[1]: chatID
+		if len(args) < 2 {
+			panic("getMetadataTag: Too few arguments")
+		}
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `","chatID":"` + args[1] + `"}`)
+	case CHAT_MESSAGE:
+		// args[1]: chatID
+		if len(args) < 2 {
+			panic("getMetadataTag: Too few arguments")
+		}
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `", "chatID":"` + args[1] + `"}`)
+	case CHAT_ADVERT_REQUEST:
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `"}`)
+	case CHAT_ADVERT:
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `"}`)
+	default:
+		log.Fatalln("getMetadataTag: Bad message type")
+		return nil
+	}
+}
+
+// --------------------------------------------------------
+// web part
+// --------------------------------------------------------
+
+const localServerAddress = ":7879"
+
+type templateHandler struct {
+	once     sync.Once
+	filename string
+	templ    *template.Template
+	data     map[string]interface{}
+}
+
+func (t *templateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t.once.Do(func() {
+		t.templ = template.Must(template.ParseFiles(filepath.Join("templates", t.filename)))
+	})
+
+	//data := map[string]interface{}{
+	//	"Host": r.Host,
+	//}
+
+	t.templ.Execute(w, t.data)
+}
+
+func (c *Client) HttpServer() {
+	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		// TODO implement me
+		writer.Write([]byte(`Hello TODZIALA`))
+	})
+	http.Handle("/fixme", &templateHandler{filename: "chat.html"})
+	http.HandleFunc("/room/", func(writer http.ResponseWriter, request *http.Request) {
+		segs := strings.Split(request.URL.Path, "/")
+		urlChatID := segs[len(segs)-1]
+
+		if c.chatList[urlChatID] == nil {
+			writer.WriteHeader(http.StatusBadRequest)
+			// TODO better handle error
+			log.Fatalln("Bad URL: chat seems to not exist")
+			// panic("Bad URL")
+		}
+
+		c.chatList[urlChatID].ServeHTTP(writer, request)
+
+	})
+	http.HandleFunc("/chat/", func(writer http.ResponseWriter, request *http.Request) {
+		segs := strings.Split(request.URL.Path, "/")
+		urlChatID := segs[len(segs)-1]
+
+		if c.chatList[urlChatID] == nil {
+			writer.WriteHeader(http.StatusBadRequest)
+			// TODO better handle error
+			log.Fatalln("Bad URL: chat seems to not exist")
+			// panic("Bad URL")
+		}
+
+		tmpH := templateHandler{
+			filename: "chat.html",
+			data: map[string]interface{}{
+				"ClientIP": c.userIP,
+				"Host":     request.Host,
+				"ChatID":   urlChatID,
+			},
+		}
+
+		tmpH.ServeHTTP(writer, request)
+
+		//c.chatList[urlChatID].ServeHTTP(writer,request)
+
+	})
+
+	// start the web server
+	log.Println("Starting web server on", localServerAddress)
+	if err := http.ListenAndServe(localServerAddress, nil); err != nil {
+		log.Fatal("ListenAndServe:", err)
+	}
+}
+
+// TEST SETUP
+
+func (c *Client) TestSetup() {
+	// necessary setup
+	go c.connectionsHandler()
+	go c.receivedPayloadHandler()
+	go c.eventListener()
+
+	participants := []string{"tcp://127.0.0.3:7878"}
+
+	if value, ok := os.LookupEnv("SAMPLE_CHAT_SETUP_ADDR"); ok {
+		participants = strings.Split(value, ",")
+		log.Println("TestSetup: chat setup/ connect to = " + participants[0])
+	}
+
+	if value, ok := os.LookupEnv("MAIN_MACHINE"); ok && value == "1" {
+		time.Sleep(5 * time.Second)
+		log.Println("Main Machine")
+		c.createChat(participants)
+	} else {
+		log.Println("Second Machine")
+	}
+
+	time.Sleep(3 * time.Minute)
+
 }

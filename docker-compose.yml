@@ -1,13 +1,45 @@
 version: '3'
 services:
   # arxen-gui version in golang
-  web:
-    build:
+  app1:
+    build: #arxen-gui-golang/
       context: arxen-gui-golang
       dockerfile: Dockerfile
+    environment:
+      - MAIN_MACHINE=1
+      - SAMPLE_CHAT_SETUP_ADDR=tcp://10.6.0.3:7878  # address to connect to
+      - USER_ADDR=tcp://10.6.0.2:7878
     ports:
-      - "8000:8000"
-    volumes:
-      - .:/app
+      - "8001:8000"
+      - 8885:7879
+      - 8884:7878
+    networks:
+      vnet:
+        ipv4_address: 10.6.0.2
+    #volumes:
+    #  - .:/app
     stdin_open: true
     tty: true
+  app2:
+    build: #arxen-gui-golang/
+      context: arxen-gui-golang
+      dockerfile: Dockerfile
+    environment:
+      - MAIN_MACHINE=0
+      - USER_ADDR=tcp://10.6.0.3:7878
+    ports:
+      - "8002:8000"
+      - 8879:7879
+    networks:
+      vnet:
+        ipv4_address: 10.6.0.3
+    #volumes:
+    #  - .:/app
+    stdin_open: true
+    tty: true
+
+networks:
+  vnet:
+    ipam:
+      config:
+        - subnet: 10.6.0.0/16

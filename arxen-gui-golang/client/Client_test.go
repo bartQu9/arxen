@@ -6,10 +6,12 @@ import (
 	"main/chat"
 	"net"
 	"reflect"
+	"sync"
 	"testing"
+	"time"
 )
 
-func TestClient_recivedPayloadHandler(t *testing.T) {
+func TestClient_receivedPayloadHandler(t *testing.T) {
 	type fields struct {
 		userIP              string
 		clientsIPs          map[string]bool
@@ -20,18 +22,22 @@ func TestClient_recivedPayloadHandler(t *testing.T) {
 		secretKey           string
 	}
 	tests := []struct {
-		name   string
-		source string
-		fields fields
+		name     string
+		source   string
+		fields   fields
+		initList []string
 	}{
-		{"test_CHAT_PARTICIPANTS_REQUEST", "tcp://10.5.0.2:7878",
+		{"test_CHAT_PARTICIPANTS_REQUEST",
+			"2",
 			fields{
 				userIP:              "tcp://10.5.0.3:7878",
 				receivedPayloadChan: make(chan payload.Payload),
 				sendDataList:        make(map[string]chan payload.Payload),
 				clientsIPs:          make(map[string]bool),
 				chatList:            make(map[string]*chat.Chat),
-			}},
+			},
+			[]string{"1", "2", "3", "4"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -45,14 +51,19 @@ func TestClient_recivedPayloadHandler(t *testing.T) {
 				secretKey:           tt.fields.secretKey,
 			}
 
-			c.createChat([]string{"1", "2", "3", "4"})
+			go c.receivedPayloadHandler()
 
-			ch := make(chan payload.Payload)
-			c.sendDataList[tt.source] = ch
+			// tmp solution
+			for _, addr := range tt.initList {
+				ch := make(chan payload.Payload, 5)
+				c.sendDataList[addr] = ch
+			}
+
+			go c.createChat(tt.initList)
+
+			time.Sleep(10 * time.Millisecond)
 
 			data01 := payload.New([]byte(`123`), []byte(`{"source":"`+tt.source+`", "type":"CHAT_PARTICIPANTS_REQUEST"}`))
-
-			go c.recivedPayloadHandler()
 
 			c.receivedPayloadChan <- data01
 
@@ -67,9 +78,92 @@ func TestClient_recivedPayloadHandler(t *testing.T) {
 
 			resp := payload.New([]byte(`2`), []byte(`{"source":"`+c.userIP+`", "type":"CHAT_PARTICIPANTS_RESPONSE"}`))
 
-			if rcvData02[1].DataUTF8() != resp.DataUTF8() {
+			if rcvData02[2].DataUTF8() != resp.DataUTF8() {
 				t.Errorf("Test failed: \"%v\" is not equal to \"%v\"", rcvData02[1], payload.New([]byte("2"),
 					[]byte(`{"source":"`+c.userIP+`", "type":"CHAT_PARTICIPANTS_RESPONSE"}`)))
+			}
+		})
+	}
+}
+
+// sometimes fails due to: "fatal error: concurrent map writes"
+func TestClient_CHAT_ADVERT(t *testing.T) {
+	type fields struct {
+		userIP              string
+		clientsIPs          map[string]bool
+		clientsSockets      map[rsocket.Client]string
+		chatList            map[string]*chat.Chat
+		sendDataList        map[string]chan payload.Payload
+		receivedPayloadChan chan payload.Payload
+		secretKey           string
+	}
+	tests := []struct {
+		name            string
+		otherClientsIPs []string
+		fields          fields
+		output          map[string][]payload.Payload
+		chatID          string
+	}{
+		{
+			"test_CHAT_PARTICIPANTS_REQUEST",
+			[]string{"tcp://10.5.0.2:7878", "tcp://10.5.0.3:7878", "tcp://10.5.0.4:7878"},
+			fields{
+				userIP:              "tcp://10.5.0.1:7878",
+				receivedPayloadChan: make(chan payload.Payload),
+				sendDataList:        make(map[string]chan payload.Payload),
+				clientsIPs:          make(map[string]bool),
+				chatList:            make(map[string]*chat.Chat),
+			},
+			make(map[string][]payload.Payload),
+			"123",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Client{
+				userIP:              tt.fields.userIP,
+				clientsIPs:          tt.fields.clientsIPs,
+				clientsSockets:      tt.fields.clientsSockets,
+				chatList:            tt.fields.chatList,
+				sendDataList:        tt.fields.sendDataList,
+				receivedPayloadChan: tt.fields.receivedPayloadChan,
+				secretKey:           tt.fields.secretKey,
+			}
+
+			var wg sync.WaitGroup
+
+			for _, item := range tt.otherClientsIPs {
+				ch := make(chan payload.Payload, 5)
+				c.sendDataList[item] = ch
+			}
+
+			go c.receivedPayloadHandler()
+
+			time.Sleep(50 * time.Millisecond)
+
+			for _, listener := range tt.otherClientsIPs {
+				wg.Add(1)
+				go func(_wg *sync.WaitGroup, lis string) {
+					defer _wg.Done()
+					for payl := range c.sendDataList[lis] {
+						tt.output[lis] = append(tt.output[lis], payl)
+						if len(tt.output[lis]) > 0 {
+							break
+						}
+					}
+				}(&wg, listener)
+			}
+
+			time.Sleep(50 * time.Millisecond)
+
+			c.createChat(tt.otherClientsIPs)
+
+			wg.Wait()
+
+			for _, item := range tt.output {
+				if item[0].DataUTF8() != tt.chatID {
+					t.Errorf("Test FAILED: output \"%s\" != \"%s\"!", item[0].DataUTF8(), tt.chatID)
+				}
 			}
 		})
 	}
@@ -144,8 +238,8 @@ func TestNewUser(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewUser(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("NewUser() = %v, want %v", got, tt.want)
+			if got := NewClient(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("NewClient() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -1,0 +1,19 @@
+name: Test Go Code
+on: [push, pull_request]
+env:
+  GO111MODULE: "on"
+jobs:
+  test:
+    env:
+      working-directory: ./arxen-gui-golang
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.13.7
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Test
+      run: go test ./...
+      working-directory: ${{env.working-directory}}
