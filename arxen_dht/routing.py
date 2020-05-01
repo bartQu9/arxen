@@ -7,6 +7,7 @@ from threading import Thread
 from queue import Queue
 from encodings.base64_codec import base64_encode
 import uuid
+from logging import debug, info, warning, error
 
 
 class KadProperties:
@@ -205,6 +206,11 @@ class KadTask(Thread):
     @staticmethod
     def get_existing_kad_tasks() -> list:
         return KadTask._KadTaskList
+
+    def __del__(self):
+        debug("Destroying {}".format(self))
+        KadTask._KadTaskList.remove(self)
+        KadTask._KadTaskCounter -= 1
 
 
 class FindNodeTask(KadTask):
