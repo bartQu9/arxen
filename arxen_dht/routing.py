@@ -95,25 +95,29 @@ class _KadRoutingTable:
 
         return collected_nodes[:next_hops_count]
 
+
 class KadRPC:
-    def __init__(self, node: Node, append_part: dict = None):
-        #TODO add a DEFAULT_NODE which is set for this local node to prevent passing Node arg in subsequent RPCs calls
+    def __init__(self, node: Node, rpc_type: str, append_part: dict = None):
+        # TODO add a DEFAULT_NODE which is set for this local node to prevent passing Node arg in subsequent RPCs calls
         """
+        :param rpc_type: REQUEST or RESPONSE
         :param node: Node which interface will send this RPC (req or resp)
         """
         self.node = node
+        self.rpc_type = rpc_type
         self.append_part = append_part
         self.rpc_uuid = uuid.uuid1()
 
         self.dict_repr = self.to_dict_representation()
 
     def to_dict_representation(self):
-        sending_node    = {"id":   self.node.node_id,
-                           "ip":   self.node.ip_info[0],
-                           "port": self.node.ip_info[1]}
+        sending_node = {"id": self.node.node_id,
+                        "ip": self.node.ip_info[0],
+                        "port": self.node.ip_info[1]}
         rpc = {"node": sending_node}
+        rpc.update({"type": self.rpc_type})
 
-        #append RPC parts from children class
+        # append RPC parts from children class
         if self.append_part:
             rpc.update(self.append_part)
 
@@ -129,17 +133,12 @@ class KadRPC:
         return "{}: {}".format(self.__class__.__name__, self.dict_repr)
 
 
-
 class RequestRPC(KadRPC):
 
-    def __init__(self, node: Node, rpc_command: str, command_arg: dict):
-        self.node = node
+    def __init__(self, rpc_command: str, command_arg: dict, *args, **kwargs):
         self.rpc_command = rpc_command
         self.command_arg = command_arg
-        super().__init__(node=node, append_part={"command": rpc_command, "arg": command_arg})
-
-
-
+        super().__init__(rpc_type="REQUEST", append_part={"command": rpc_command, "arg": command_arg}, *args, **kwargs)
 
 
 class FindNodeRPC(RequestRPC):
@@ -149,6 +148,7 @@ class FindNodeRPC(RequestRPC):
         """
         super().__init__(rpc_command="FIND_NODE", command_arg={"node_id": str(lookup_node_id)}, *args, **kwargs)
 
+
 class FindValueRPC(RequestRPC):
     def __init__(self, value_id: int, *args, **kwargs):
         """
@@ -156,33 +156,29 @@ class FindValueRPC(RequestRPC):
         """
         super().__init__(rpc_command="FIND_VALUE", command_arg={"value_id": str(value_id)}, *args, **kwargs)
 
+
 class PingRPC(RequestRPC):
     def __init__(self, node_id: int, *args, **kwargs):
         super().__init__(rpc_command="PING", command_arg={"node_id": str(node_id)}, *args, **kwargs)
 
+
 class StoreRPC(RequestRPC):
     def __init__(self, value_id: int, data: bytes, *args, **kwargs):
         super().__init__(rpc_command="STORE", command_arg={"value_id": str(value_id),
-                                                            "data": str(base64_encode(data))}, *args, **kwargs)
+                                                           "data": str(base64_encode(data))}, *args, **kwargs)
 
-class KadRCPResponse:
 
-    def __init__(self, resposing_node: Node, request_rpc_uuid: uuid.UUID, response_data):
+class ResponseRPC(KadRPC):
+
+    def __init__(self, request_rpc_uuid: uuid.UUID, response_data, *args, **kwargs):
+        """
+        :param response_type: int, str, dict - how recipient should parse data
+        """
         self.request_rpc_uuid = request_rpc_uuid
         self.response_data = response_data
-        self.responsing_node = resposing_node
 
-    def to_dict_representation(self):
-        responsing_node = {"id": self.responsing_node.node_id,
-                           "ip": self.responsing_node.ip_info[0],
-                           "port": self.responsing_node.ip_info[1]}
-        request_uuid = base64_encode(self.request_rpc_uuid.bytes[0]).decode()
-        response = {"type": str(type(self.response_data))}
-
-        rpc = {"node": requesting_node,
-               "command": command,
-               "arg": arg}
-        return rpc
+        append_part = {"request_rpc_uuid": request_rpc_uuid, "response_data": response_data}
+        super().__init__(rpc_type="RESPONSE", append_part=append_part, *args, **kwargs)
 
 
 class KadTask(Thread):
@@ -219,10 +215,7 @@ class FindNodeTask(KadTask):
         super().__init__(facility="FindNodeTask")
 
     def run(self):
-
-
-
-
+        pass
 
 
 class KadEngine:
