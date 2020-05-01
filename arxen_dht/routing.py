@@ -5,6 +5,8 @@ import json
 from secrets import randbits
 from threading import Thread
 from queue import Queue
+from encodings.base64_codec import base64_encode
+import uuid
 
 
 class KadProperties:
@@ -94,42 +96,94 @@ class _KadRoutingTable:
         return collected_nodes[:next_hops_count]
 
 class KadRPC:
-    def __init__(self, initiator: Node, rpc_command: str, command_arg: dict):
-        self.initiator = initiator
-        self.rpc_command = rpc_command
-        self.command_arg = command_arg
+    def __init__(self, node: Node, append_part: dict = None):
+        #TODO add a DEFAULT_NODE which is set for this local node to prevent passing Node arg in subsequent RPCs calls
+        """
+        :param node: Node which interface will send this RPC (req or resp)
+        """
+        self.node = node
+        self.append_part = append_part
+        self.rpc_uuid = uuid.uuid1()
+
+        self.dict_repr = self.to_dict_representation()
 
     def to_dict_representation(self):
-        requesting_node = {"id":   self.initiator.node_id,
-                           "ip":   self.initiator.ip_info[0],
-                           "port": self.initiator.ip_info[1]}
-        command = self.rpc_command
-        arg = self.command_arg
+        sending_node    = {"id":   self.node.node_id,
+                           "ip":   self.node.ip_info[0],
+                           "port": self.node.ip_info[1]}
+        rpc = {"node": sending_node}
+
+        #append RPC parts from children class
+        if self.append_part:
+            rpc.update(self.append_part)
+
+        rpc_uuid_b64 = base64_encode(self.rpc_uuid.bytes)[0].decode()
+        rpc.update({"rpc_uuid": rpc_uuid_b64})
+
+        return rpc
+
+    def get_json(self):
+        return json.dumps(self.to_dict_representation())
+
+    def __repr__(self):
+        return "{}: {}".format(self.__class__.__name__, self.dict_repr)
+
+
+
+class RequestRPC(KadRPC):
+
+    def __init__(self, node: Node, rpc_command: str, command_arg: dict):
+        self.node = node
+        self.rpc_command = rpc_command
+        self.command_arg = command_arg
+        super().__init__(node=node, append_part={"command": rpc_command, "arg": command_arg})
+
+
+
+
+
+class FindNodeRPC(RequestRPC):
+    def __init__(self, lookup_node_id: int, *args, **kwargs):
+        """
+        lookup_node_id: node we're looking for
+        """
+        super().__init__(rpc_command="FIND_NODE", command_arg={"node_id": str(lookup_node_id)}, *args, **kwargs)
+
+class FindValueRPC(RequestRPC):
+    def __init__(self, value_id: int, *args, **kwargs):
+        """
+        value_id: value ID of data we're trying to GET
+        """
+        super().__init__(rpc_command="FIND_VALUE", command_arg={"value_id": str(value_id)}, *args, **kwargs)
+
+class PingRPC(RequestRPC):
+    def __init__(self, node_id: int, *args, **kwargs):
+        super().__init__(rpc_command="PING", command_arg={"node_id": str(node_id)}, *args, **kwargs)
+
+class StoreRPC(RequestRPC):
+    def __init__(self, value_id: int, data: bytes, *args, **kwargs):
+        super().__init__(rpc_command="STORE", command_arg={"value_id": str(value_id),
+                                                            "data": str(base64_encode(data))}, *args, **kwargs)
+
+class KadRCPResponse:
+
+    def __init__(self, resposing_node: Node, request_rpc_uuid: uuid.UUID, response_data):
+        self.request_rpc_uuid = request_rpc_uuid
+        self.response_data = response_data
+        self.responsing_node = resposing_node
+
+    def to_dict_representation(self):
+        responsing_node = {"id": self.responsing_node.node_id,
+                           "ip": self.responsing_node.ip_info[0],
+                           "port": self.responsing_node.ip_info[1]}
+        request_uuid = base64_encode(self.request_rpc_uuid.bytes[0]).decode()
+        response = {"type": str(type(self.response_data))}
 
         rpc = {"node": requesting_node,
                "command": command,
                "arg": arg}
         return rpc
 
-    def get_json(self):
-        return json.dumps(self.to_dict_representation())
-
-
-class FindNodeRPC(KadRPC):
-    def __init__(self, node_id: int, initiator: Node):
-        """
-        node_id: node we're looking for
-        """
-        super().__init__(initiator=initiator, rpc_command="FIND_NODE", command_arg={"node_id": str(node_id)})
-
-class FindValueRPC(KadRPC):
-    def __init__(self, value_id: int, initiator: Node):
-        """
-        value_id: value ID of data we're trying to GET
-        """
-        super().__init__(initiator=initiator, rpc_command="FIND_VALUE", command_arg={"value_id": str(value_id)})
-class KadRCPResponse:
-    pass
 
 class KadTask(Thread):
     """
