@@ -1,9 +1,10 @@
 """
 Kademlia DHT implementation
 """
-
+import json
 from secrets import randbits
 from threading import Thread
+from queue import Queue
 
 
 class KadProperties:
@@ -92,11 +93,48 @@ class _KadRoutingTable:
 
         return collected_nodes[:next_hops_count]
 
+class KadRPC:
+    def __init__(self, initiator: Node, rpc_command: str, command_arg: dict):
+        self.initiator = initiator
+        self.rpc_command = rpc_command
+        self.command_arg = command_arg
+
+    def to_dict_representation(self):
+        requesting_node = {"id":   self.initiator.node_id,
+                           "ip":   self.initiator.ip_info[0],
+                           "port": self.initiator.ip_info[1]}
+        command = self.rpc_command
+        arg = self.command_arg
+
+        rpc = {"node": requesting_node,
+               "command": command,
+               "arg": arg}
+        return rpc
+
+    def get_json(self):
+        return json.dumps(self.to_dict_representation())
+
+
+class FindNodeRPC(KadRPC):
+    def __init__(self, node_id: int, initiator: Node):
+        """
+        node_id: node we're looking for
+        """
+        super().__init__(initiator=initiator, rpc_command="FIND_NODE", command_arg={"node_id": str(node_id)})
+
+class FindValueRPC(KadRPC):
+    def __init__(self, value_id: int, initiator: Node):
+        """
+        value_id: value ID of data we're trying to GET
+        """
+        super().__init__(initiator=initiator, rpc_command="FIND_VALUE", command_arg={"value_id": str(value_id)})
+class KadRCPResponse:
+    pass
 
 class KadTask(Thread):
     """
     Represents generic task which is performed e.g. FINDing_NODEs requires underlying nodes interactions, so this class
-    will keep needed queues and other subtasks
+    will keep needed queues and other subtasks, BASE CLASS FOR CONCURRENCY
     """
 
     _KadTaskList = []
@@ -111,9 +149,26 @@ class KadTask(Thread):
         self.children_tasks = []
         self.parentTask = parent
 
+        self.ingress_queue = Queue()
+        self.egress_queue = Queue()
+
     @staticmethod
     def get_existing_kad_tasks() -> list:
         return KadTask._KadTaskList
+
+
+class FindNodeTask(KadTask):
+    def __init__(self, node_id: int, *args, **kwargs):
+        """
+        :param node_id: node we are trying to find
+        """
+        super().__init__(facility="FindNodeTask")
+
+    def run(self):
+
+
+
+
 
 
 class KadEngine:
