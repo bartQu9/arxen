@@ -10,7 +10,7 @@ import (
 	"github.com/rs/cors"
 	"log"
 	"main/client"
-	"main/server"
+	"main/gql"
 	"net/http"
 	"sync"
 	"time"
@@ -35,7 +35,7 @@ func (c *ClientServer) Serve(port int) error {
 	mux := http.NewServeMux()
 	mux.Handle(
 		GRAPHQL_ROUTE,
-		handler.GraphQL(server.NewExecutableSchema(server.Config{Resolvers: c}),
+		handler.GraphQL(gql.NewExecutableSchema(gql.Config{Resolvers: c}),
 			handler.WebsocketUpgrader(websocket.Upgrader{
 				CheckOrigin: func(r *http.Request) bool {
 					return true
@@ -52,9 +52,9 @@ func (c *ClientServer) Serve(port int) error {
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), handler)
 }
 
-func (c *ClientServer) PostMessage(ctx context.Context, chatID string, text string) (*server.TextMessage, error) {
+func (c *ClientServer) PostMessage(ctx context.Context, chatID string, text string) (*gql.TextMessage, error) {
 
-	m := server.TextMessage{
+	m := gql.TextMessage{
 		ChatID:    chatID,
 		User:      c.client.GetUserID(),
 		TimeStamp: time.Now().UTC(),
@@ -69,10 +69,10 @@ func (c *ClientServer) PostMessage(ctx context.Context, chatID string, text stri
 	return &m, nil
 }
 
-func (c *ClientServer) CreateChat(ctx context.Context, users []string) (*server.Chat, error) {
+func (c *ClientServer) CreateChat(ctx context.Context, users []string) (*gql.Chat, error) {
 	ch := c.client.CreateChat(users)
 
-	tmpChat := &server.Chat{
+	tmpChat := &gql.Chat{
 		ChatID:         ch.ChatID,
 		ClientsIPsList: ch.ClientsIPsList(),
 	}
@@ -80,7 +80,7 @@ func (c *ClientServer) CreateChat(ctx context.Context, users []string) (*server.
 	return tmpChat, nil
 }
 
-func (c *ClientServer) Messages(ctx context.Context, chatID string) ([]*server.TextMessage, error) {
+func (c *ClientServer) Messages(ctx context.Context, chatID string) ([]*gql.TextMessage, error) {
 	// find chat and forward message
 	c.mutex.Lock()
 	textList := c.client.GetChatList()[chatID].TextMessageList
@@ -105,11 +105,11 @@ func (c *ClientServer) ChatUsers(ctx context.Context, chatID string) ([]string, 
 	return nil, errors.New("clients IPs List could be not returned")
 }
 
-func (c *ClientServer) Chats(ctx context.Context) ([]*server.Chat, error) {
+func (c *ClientServer) Chats(ctx context.Context) ([]*gql.Chat, error) {
 	panic("implement me")
 }
 
-func (c *ClientServer) MessagePosted(ctx context.Context, chatID string) (<-chan *server.TextMessage, error) {
+func (c *ClientServer) MessagePosted(ctx context.Context, chatID string) (<-chan *gql.TextMessage, error) {
 	// Create new channel for request
 	c.mutex.Lock()
 	messages := c.client.GetChatList()[chatID].MessagesChan
@@ -123,19 +123,19 @@ func (c *ClientServer) UserJoined(ctx context.Context, chatID string) (<-chan st
 	return make(chan string, 1), nil
 }
 
-func (c *ClientServer) ChatCreated(ctx context.Context) (<-chan *server.Chat, error) {
+func (c *ClientServer) ChatCreated(ctx context.Context) (<-chan *gql.Chat, error) {
 	// TODO implement me
-	return make(chan *server.Chat, 1), nil
+	return make(chan *gql.Chat, 1), nil
 }
 
-func (c *ClientServer) Mutation() server.MutationResolver {
+func (c *ClientServer) Mutation() gql.MutationResolver {
 	return c
 }
 
-func (c *ClientServer) Query() server.QueryResolver {
+func (c *ClientServer) Query() gql.QueryResolver {
 	return c
 }
 
-func (c *ClientServer) Subscription() server.SubscriptionResolver {
+func (c *ClientServer) Subscription() gql.SubscriptionResolver {
 	return c
 }

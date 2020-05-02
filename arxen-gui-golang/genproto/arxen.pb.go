@@ -219,7 +219,7 @@ func (c *messageDeliveryEventClient) SendMessage(ctx context.Context, in *Messag
 	return out, nil
 }
 
-// MessageDeliveryEventServer is the server API for MessageDeliveryEvent service.
+// MessageDeliveryEventServer is the gql API for MessageDeliveryEvent service.
 type MessageDeliveryEventServer interface {
 	SendMessage(context.Context, *Message) (*MessageDeliveryStatusResponse, error)
 }

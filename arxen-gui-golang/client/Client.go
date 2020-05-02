@@ -11,7 +11,7 @@ import (
 	"html/template"
 	"log"
 	"main/chat"
-	"main/server"
+	"main/gql"
 	"net"
 	"net/http"
 	"os"
@@ -506,10 +506,10 @@ func (c *Client) getMetadataTag(args ...string) []byte {
 	}
 }
 
-// Convert incoming payload to TextMessage (defined in server module)
+// Convert incoming payload to TextMessage (defined in gql module)
 // CHAT_MESSAGE:			  {message,{source, type, chatID}}
 // where "message" contains {user, timeStamp, text, chatId}
-func PayloadToGraphqlTextMessage(p payload.Payload) server.TextMessage {
+func PayloadToGraphqlTextMessage(p payload.Payload) gql.TextMessage {
 	dataJson := p.Data()
 	var data map[string]interface{}
 	if err := json.Unmarshal(dataJson, &data); err != nil {
@@ -519,7 +519,7 @@ func PayloadToGraphqlTextMessage(p payload.Payload) server.TextMessage {
 
 	// TODO what if empty data
 
-	return server.TextMessage{
+	return gql.TextMessage{
 		ChatID:    data["chatId"].(string),
 		User:      data["user"].(string),
 		TimeStamp: data["timeStamp"].(time.Time),
@@ -529,7 +529,7 @@ func PayloadToGraphqlTextMessage(p payload.Payload) server.TextMessage {
 
 // converts text message format to bytes
 // probably redundant in the future
-func GraphqlTextMessageToByte(message server.TextMessage) []byte {
+func GraphqlTextMessageToByte(message gql.TextMessage) []byte {
 	return []byte(`{"chatId": "` + message.ChatID + `", "user": "` + message.User + `", "timeStamp": "` + message.TimeStamp.String() + `", "text": "` + message.Text + `" }`)
 }
 
@@ -607,8 +607,8 @@ func (c *Client) HttpServer() {
 
 	})
 
-	// start the web server
-	log.Println("Starting web server on", localServerAddress)
+	// start the web gql
+	log.Println("Starting web gql on", localServerAddress)
 	if err := http.ListenAndServe(localServerAddress, nil); err != nil {
 		log.Fatal("ListenAndServe:", err)
 	}
