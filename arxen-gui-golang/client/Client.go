@@ -429,7 +429,7 @@ func (c *Client) receivedPayloadHandler() {
 		case CHAT_PARTICIPANTS_RESPONSE:
 			// create new chat
 			// not ideal solution
-			addrArray := strings.Split(payl.DataUTF8(),",")
+			addrArray := strings.Split(payl.DataUTF8(), ",")
 			log.Println("receivedPayloadHandler: beginning creation of new chat")
 			c.createSlaveChat(addrArray, metadata["chatID"].(string))
 		default:
@@ -517,6 +517,9 @@ func (t *templateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Client) HttpServer() {
+	http.HandleFunc("/testing", func(writer http.ResponseWriter, request *http.Request) {
+
+	})
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 		// TODO implement me
 		writer.Write([]byte(`Hello TODZIALA`))
