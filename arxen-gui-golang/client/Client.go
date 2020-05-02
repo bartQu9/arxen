@@ -11,6 +11,7 @@ import (
 	"html/template"
 	"log"
 	"main/chat"
+	"main/server"
 	"net"
 	"net/http"
 	"os"
@@ -50,6 +51,10 @@ type Client struct {
 
 	friendsList map[string]Friend // map[friendsNick]Friend
 	secretKey   string            // used for authentication
+}
+
+func (c *Client) GetChatList() map[string]*chat.Chat {
+	return c.chatList
 }
 
 // return new Client
@@ -109,7 +114,7 @@ func (c *Client) eventListener() {
 
 // TODO implement till the end
 // method used to create new chat
-func (c *Client) createChat(initList []string) {
+func (c *Client) CreateChat(initList []string) *chat.Chat {
 
 	// TODO add chat ID generator
 	chatIDstr := "123"
@@ -136,6 +141,8 @@ func (c *Client) createChat(initList []string) {
 
 	// advert new chat
 	c.receivedPayloadChan <- payload.New([]byte(chatIDstr), c.getMetadataTag(CHAT_ADVERT_REQUEST))
+
+	return tmpChat
 
 	// CODE BELOW NOT NEEDED;
 	// TODO REMOVE IN FUTURE
@@ -263,6 +270,11 @@ func (c *Client) clientManager() {
 
 }
 
+func (c *Client) GetUserID() string {
+	// TODO change in the future
+	return c.userIP
+}
+
 // used to obtain machine IP address
 func GetOutboundIP() (net.IP, bool) {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
@@ -327,7 +339,7 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 			// TODO possibly remove
 
 			// create new chat
-			//c.createChat([]string{})
+			//c.CreateChat([]string{})
 
 			inputs.(flux.Flux).DoFinally(func(s rx.SignalType) {
 				log.Printf("signal type: %v", s)
@@ -386,11 +398,14 @@ func (c *Client) receivedPayloadHandler() {
 			// authentication
 			if dest := metadata["chatID"]; dest != nil {
 				// send to appropriate chat
-				c.chatList[dest.(string)].MessagesChan <- chat.TextMessage{
-					Data:      payl.DataUTF8(),
-					Author:    metadata["source"].(string),
-					Timestamp: time.Now(),
-				}
+				tmpTextMessage := PayloadToGraphqlTextMessage(payl)
+				c.chatList[dest.(string)].MessagesChan <- &tmpTextMessage
+				c.chatList[dest.(string)].TextMessageList = append(c.chatList[dest.(string)].TextMessageList, &tmpTextMessage)
+				//<- chat.TextMessage{
+				//	Data:      payl.DataUTF8(),
+				//	Author:    metadata["source"].(string),
+				//	Timestamp: time.Now(),
+				//}
 			}
 		case CHAT_PARTICIPANTS_REQUEST:
 			// send all participating clients IPs to requester
@@ -444,11 +459,11 @@ func (c *Client) chatMessagesHandler(chat *chat.Chat) {
 	for newMessageToBeSend := range chat.SendMessageChan {
 		// transform message
 
-		// TODO add rest message metadata
-		payloadMessage := payload.New([]byte(newMessageToBeSend.Data), c.getMetadataTag(CHAT_MESSAGE, chat.ChatID))
+		payloadMessage := payload.New(GraphqlTextMessageToByte(newMessageToBeSend), c.getMetadataTag(CHAT_MESSAGE, chat.ChatID))
 
-		// forward to oneself
+		// forward to oneself and add to list
 		c.receivedPayloadChan <- payloadMessage
+		chat.TextMessageList = append(chat.TextMessageList, &newMessageToBeSend)
 
 		log.Println("chatMessagesHandler: Message to be send: ", payloadMessage)
 
@@ -489,6 +504,33 @@ func (c *Client) getMetadataTag(args ...string) []byte {
 		log.Fatalln("getMetadataTag: Bad message type")
 		return nil
 	}
+}
+
+// Convert incoming payload to TextMessage (defined in server module)
+// CHAT_MESSAGE:			  {message,{source, type, chatID}}
+// where "message" contains {user, timeStamp, text, chatId}
+func PayloadToGraphqlTextMessage(p payload.Payload) server.TextMessage {
+	dataJson := p.Data()
+	var data map[string]interface{}
+	if err := json.Unmarshal(dataJson, &data); err != nil {
+		// TODO better handle error
+		panic(err)
+	}
+
+	// TODO what if empty data
+
+	return server.TextMessage{
+		ChatID:    data["chatId"].(string),
+		User:      data["user"].(string),
+		TimeStamp: data["timeStamp"].(time.Time),
+		Text:      data["text"].(string),
+	}
+}
+
+// converts text message format to bytes
+// probably redundant in the future
+func GraphqlTextMessageToByte(message server.TextMessage) []byte {
+	return []byte(`{"chatId": "` + message.ChatID + `", "user": "` + message.User + `", "timeStamp": "` + message.TimeStamp.String() + `", "text": "` + message.Text + `" }`)
 }
 
 // --------------------------------------------------------
@@ -590,7 +632,7 @@ func (c *Client) TestSetup() {
 	if value, ok := os.LookupEnv("MAIN_MACHINE"); ok && value == "1" {
 		time.Sleep(5 * time.Second)
 		log.Println("Main Machine")
-		c.createChat(participants)
+		c.CreateChat(participants)
 	} else {
 		log.Println("Second Machine")
 	}

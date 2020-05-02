@@ -59,7 +59,7 @@ func TestClient_receivedPayloadHandler(t *testing.T) {
 				c.sendDataList[addr] = ch
 			}
 
-			go c.createChat(tt.initList)
+			go c.CreateChat(tt.initList)
 
 			time.Sleep(10 * time.Millisecond)
 
@@ -177,7 +177,7 @@ func TestClient_CHAT_ADVERT(t *testing.T) {
 
 			time.Sleep(50 * time.Millisecond)
 
-			c.createChat(tt.otherClientsIPs)
+			c.CreateChat(tt.otherClientsIPs)
 
 			wg.Wait()
 

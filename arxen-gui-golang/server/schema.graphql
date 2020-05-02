@@ -1,0 +1,30 @@
+scalar Time
+
+type TextMessage {
+    chatId: String!
+    user: String!
+    timeStamp: Time!
+    text: String!
+}
+
+type Chat {
+    chatId: String!
+    clientsIPsList: [String!]!
+}
+
+type Mutation {
+    postMessage(chatID: String!, text: String!): TextMessage
+    createChat(users: [String!]!): Chat
+}
+
+type Query {
+    messages(chatID: String!): [TextMessage!]
+    chatUsers(chatID: String!): [String!]!
+    chats: [Chat]!
+}
+
+type Subscription {
+    messagePosted(chatID: String!): TextMessage!
+    userJoined(chatID: String!): String!
+    chatCreated: Chat!
+}
