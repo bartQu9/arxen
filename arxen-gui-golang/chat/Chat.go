@@ -1,12 +1,8 @@
 package chat
 
 import (
-	"github.com/gorilla/websocket"
 	"github.com/rsocket/rsocket-go/rx/flux"
-	"log"
 	"main/gql"
-	"net/http"
-	"time"
 )
 
 type Chat struct {
@@ -30,7 +26,7 @@ type Chat struct {
 	f        flux.Flux
 
 	// socket connected with to frontend
-	socket *websocket.Conn
+	// socket *websocket.Conn
 }
 
 // TODO add logic for adding clients from friends list
@@ -48,71 +44,71 @@ func (c Chat) ClientsIPsList() []string {
 
 func (c *Chat) stopChat() {}
 
-const (
-	socketBufferSize  = 1024
-	messageBufferSize = 256
-)
+//const (
+//	socketBufferSize  = 1024
+//	messageBufferSize = 256
+//)
 
-var upgrader = &websocket.Upgrader{ReadBufferSize: socketBufferSize, WriteBufferSize: socketBufferSize}
+//var upgrader = &websocket.Upgrader{ReadBufferSize: socketBufferSize, WriteBufferSize: socketBufferSize}
 
-func (c *Chat) read() {
-	defer c.socket.Close()
-	for {
-		//var msg *string
-		//
-		//err := c.socket.ReadJSON(&msg)
-		//log.Println("read(): Got Message from Websocket ", *msg)
-		//if err != nil {
-		//	return
-		//}
-		//
-		//msgToSend := TextMessage{
-		//	Data: *msg,
-		//	Timestamp: time.Now(),
-		//	Author: "tmp_solution",
-		//}
-		//// msgToSend.Data = *msg
-		//// msgToSend.Timestamp = time.Now()
-		//// TODO solve stamping messages with author
-		//// msgToSend.Author = "tmp_solution"
-		//// to payload
-		//c.SendMessageChan <- msgToSend
-		var msg *gql.TextMessage
-		err := c.socket.ReadJSON(&msg)
-		if err != nil {
-			return
-		}
-		msg.TimeStamp = time.Now()
-		msg.User = "tmp"
-		log.Println("read(): Got Message from Websocket ", *msg)
-		c.SendMessageChan <- *msg
-	}
-}
+//func (c *Chat) read() {
+//	defer c.socket.Close()
+//	for {
+//		//var msg *string
+//		//
+//		//err := c.socket.ReadJSON(&msg)
+//		//log.Println("read(): Got Message from Websocket ", *msg)
+//		//if err != nil {
+//		//	return
+//		//}
+//		//
+//		//msgToSend := TextMessage{
+//		//	Data: *msg,
+//		//	Timestamp: time.Now(),
+//		//	Author: "tmp_solution",
+//		//}
+//		//// msgToSend.Data = *msg
+//		//// msgToSend.Timestamp = time.Now()
+//		//// TODO solve stamping messages with author
+//		//// msgToSend.Author = "tmp_solution"
+//		//// to payload
+//		//c.SendMessageChan <- msgToSend
+//		var msg *gql.TextMessage
+//		err := c.socket.ReadJSON(&msg)
+//		if err != nil {
+//			return
+//		}
+//		msg.TimeStamp = time.Now()
+//		msg.User = "tmp"
+//		log.Println("read(): Got Message from Websocket ", *msg)
+//		c.SendMessageChan <- *msg
+//	}
+//}
 
-func (c *Chat) write() {
-	defer c.socket.Close()
-	for msg := range c.MessagesChan {
-		// TODO fix me properly
-		// implement proper type transition
-		log.Println("write(): message to be written: ", msg)
-		//err := c.socket.WriteJSON("{\"Data\":\""+msg.DataUTF8()+"\",\"Author\":\""+"TBD"+"\"}")
-		err := c.socket.WriteJSON(msg)
-		if err != nil {
-			return
-		}
-	}
-}
+//func (c *Chat) write() {
+//	defer c.socket.Close()
+//	for msg := range c.MessagesChan {
+//		// TODO fix me properly
+//		// implement proper type transition
+//		log.Println("write(): message to be written: ", msg)
+//		//err := c.socket.WriteJSON("{\"Data\":\""+msg.DataUTF8()+"\",\"Author\":\""+"TBD"+"\"}")
+//		err := c.socket.WriteJSON(msg)
+//		if err != nil {
+//			return
+//		}
+//	}
+//}
 
-// probably removed in future commits
-func (c *Chat) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	socket, err := upgrader.Upgrade(w, req, nil)
-	c.socket = socket // no idea if it works actually
-	if err != nil {
-		log.Fatal("ServeHTTP:", err)
-		return
-	}
-
-	defer func() { c.stopChat() }()
-	go c.write()
-	c.read()
-}
+//// probably removed in future commits
+//func (c *Chat) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+//	socket, err := upgrader.Upgrade(w, req, nil)
+//	c.socket = socket // no idea if it works actually
+//	if err != nil {
+//		log.Fatal("ServeHTTP:", err)
+//		return
+//	}
+//
+//	defer func() { c.stopChat() }()
+//	go c.write()
+//	c.read()
+//}

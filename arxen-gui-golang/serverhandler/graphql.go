@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/rs/cors"
 	"log"
+	"main/chat"
 	"main/client"
 	"main/gql"
 	"net/http"
@@ -44,6 +45,10 @@ func (c *ClientServer) Serve(port int) error {
 		),
 	)
 	mux.Handle("/playground", handler.Playground("GraphQL", GRAPHQL_ROUTE))
+
+	mux.HandleFunc("/test", func(writer http.ResponseWriter, request *http.Request) {
+		writer.Write([]byte(`Hello`))
+	})
 
 	// TODO add more routes
 
@@ -106,7 +111,21 @@ func (c *ClientServer) ChatUsers(ctx context.Context, chatID string) ([]string, 
 }
 
 func (c *ClientServer) Chats(ctx context.Context) ([]*gql.Chat, error) {
-	panic("implement me")
+	var chats map[string]*chat.Chat
+	var gqlChats []*gql.Chat
+
+	c.mutex.Lock()
+	chats = c.client.GetChatList()
+	c.mutex.Unlock()
+
+	for _, ch := range chats {
+		gqlChats = append(gqlChats, &gql.Chat{
+			ChatID:         ch.ChatID,
+			ClientsIPsList: ch.ClientsIPsList(),
+		})
+	}
+
+	return gqlChats, nil
 }
 
 func (c *ClientServer) MessagePosted(ctx context.Context, chatID string) (<-chan *gql.TextMessage, error) {

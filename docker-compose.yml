@@ -13,6 +13,7 @@ services:
       - "8001:8000"
       - 8885:7879
       - 8884:7878
+      - 8085:8085
     networks:
       vnet:
         ipv4_address: 10.6.0.2
@@ -30,6 +31,7 @@ services:
     ports:
       - "8002:8000"
       - 8879:7879
+      - 8086:8085
     networks:
       vnet:
         ipv4_address: 10.6.0.3

@@ -8,16 +8,12 @@ import (
 	"github.com/rsocket/rsocket-go/rx"
 	"github.com/rsocket/rsocket-go/rx/flux"
 	"github.com/rsocket/rsocket-go/rx/mono"
-	"html/template"
 	"log"
 	"main/chat"
 	"main/gql"
 	"net"
-	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -537,82 +533,82 @@ func GraphqlTextMessageToByte(message gql.TextMessage) []byte {
 // web part
 // --------------------------------------------------------
 
-const localServerAddress = ":7879"
+//const localServerAddress = ":7879"
 
-type templateHandler struct {
-	once     sync.Once
-	filename string
-	templ    *template.Template
-	data     map[string]interface{}
-}
+//type templateHandler struct {
+//	once     sync.Once
+//	filename string
+//	templ    *template.Template
+//	data     map[string]interface{}
+//}
 
-func (t *templateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	t.once.Do(func() {
-		t.templ = template.Must(template.ParseFiles(filepath.Join("templates", t.filename)))
-	})
-
-	//data := map[string]interface{}{
-	//	"Host": r.Host,
-	//}
-
-	t.templ.Execute(w, t.data)
-}
-
-func (c *Client) HttpServer() {
-	http.HandleFunc("/testing", func(writer http.ResponseWriter, request *http.Request) {
-
-	})
-	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-		// TODO implement me
-		writer.Write([]byte(`Hello TODZIALA`))
-	})
-	http.Handle("/fixme", &templateHandler{filename: "chat.html"})
-	http.HandleFunc("/room/", func(writer http.ResponseWriter, request *http.Request) {
-		segs := strings.Split(request.URL.Path, "/")
-		urlChatID := segs[len(segs)-1]
-
-		if c.chatList[urlChatID] == nil {
-			writer.WriteHeader(http.StatusBadRequest)
-			// TODO better handle error
-			log.Fatalln("Bad URL: chat seems to not exist")
-			// panic("Bad URL")
-		}
-
-		c.chatList[urlChatID].ServeHTTP(writer, request)
-
-	})
-	http.HandleFunc("/chat/", func(writer http.ResponseWriter, request *http.Request) {
-		segs := strings.Split(request.URL.Path, "/")
-		urlChatID := segs[len(segs)-1]
-
-		if c.chatList[urlChatID] == nil {
-			writer.WriteHeader(http.StatusBadRequest)
-			// TODO better handle error
-			log.Fatalln("Bad URL: chat seems to not exist")
-			// panic("Bad URL")
-		}
-
-		tmpH := templateHandler{
-			filename: "chat.html",
-			data: map[string]interface{}{
-				"ClientIP": c.userIP,
-				"Host":     request.Host,
-				"ChatID":   urlChatID,
-			},
-		}
-
-		tmpH.ServeHTTP(writer, request)
-
-		//c.chatList[urlChatID].ServeHTTP(writer,request)
-
-	})
-
-	// start the web gql
-	log.Println("Starting web gql on", localServerAddress)
-	if err := http.ListenAndServe(localServerAddress, nil); err != nil {
-		log.Fatal("ListenAndServe:", err)
-	}
-}
+//func (t *templateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+//	t.once.Do(func() {
+//		t.templ = template.Must(template.ParseFiles(filepath.Join("templates", t.filename)))
+//	})
+//
+//	//data := map[string]interface{}{
+//	//	"Host": r.Host,
+//	//}
+//
+//	t.templ.Execute(w, t.data)
+//}
+//
+//func (c *Client) HttpServer() {
+//	http.HandleFunc("/testing", func(writer http.ResponseWriter, request *http.Request) {
+//
+//	})
+//	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+//		// TODO implement me
+//		writer.Write([]byte(`Hello TODZIALA`))
+//	})
+//	http.Handle("/fixme", &templateHandler{filename: "chat.html"})
+//	http.HandleFunc("/room/", func(writer http.ResponseWriter, request *http.Request) {
+//		segs := strings.Split(request.URL.Path, "/")
+//		urlChatID := segs[len(segs)-1]
+//
+//		if c.chatList[urlChatID] == nil {
+//			writer.WriteHeader(http.StatusBadRequest)
+//			// TODO better handle error
+//			log.Fatalln("Bad URL: chat seems to not exist")
+//			// panic("Bad URL")
+//		}
+//
+//		c.chatList[urlChatID].ServeHTTP(writer, request)
+//
+//	})
+//	http.HandleFunc("/chat/", func(writer http.ResponseWriter, request *http.Request) {
+//		segs := strings.Split(request.URL.Path, "/")
+//		urlChatID := segs[len(segs)-1]
+//
+//		if c.chatList[urlChatID] == nil {
+//			writer.WriteHeader(http.StatusBadRequest)
+//			// TODO better handle error
+//			log.Fatalln("Bad URL: chat seems to not exist")
+//			// panic("Bad URL")
+//		}
+//
+//		tmpH := templateHandler{
+//			filename: "chat.html",
+//			data: map[string]interface{}{
+//				"ClientIP": c.userIP,
+//				"Host":     request.Host,
+//				"ChatID":   urlChatID,
+//			},
+//		}
+//
+//		tmpH.ServeHTTP(writer, request)
+//
+//		//c.chatList[urlChatID].ServeHTTP(writer,request)
+//
+//	})
+//
+//	// start the web gql
+//	log.Println("Starting web gql on", localServerAddress)
+//	if err := http.ListenAndServe(localServerAddress, nil); err != nil {
+//		log.Fatal("ListenAndServe:", err)
+//	}
+//}
 
 // TEST SETUP
 
@@ -637,6 +633,6 @@ func (c *Client) TestSetup() {
 		log.Println("Second Machine")
 	}
 
-	time.Sleep(3 * time.Minute)
+	//time.Sleep(10 * time.Minute)
 
 }
