@@ -70,6 +70,8 @@ func (c *ClientServer) PostMessage(ctx context.Context, chatID string, text stri
 	c.client.GetChatList()[chatID].SendMessageChan <- m
 	c.mutex.Unlock()
 
+	log.Println("PostMessage: chatID ", chatID, " text \"", text, "\", resp: ", m)
+
 	// TODO add error handle
 	return &m, nil
 }
@@ -82,6 +84,8 @@ func (c *ClientServer) CreateChat(ctx context.Context, users []string) (*gql.Cha
 		ClientsIPsList: ch.ClientsIPsList(),
 	}
 
+	log.Println("CreateChat: users ", users, " resp: ", tmpChat.ChatID)
+
 	return tmpChat, nil
 }
 
@@ -91,17 +95,22 @@ func (c *ClientServer) Messages(ctx context.Context, chatID string) ([]*gql.Text
 	textList := c.client.GetChatList()[chatID].TextMessageList
 	c.mutex.Unlock()
 
+	log.Println("Messages: chatID ", chatID, " resp: ", textList)
+
 	if textList != nil {
 		return textList, nil
 	}
 
-	return nil, errors.New("text messages list could be not returned")
+	//return nil, errors.New("text messages list could be not returned")
+	return []*gql.TextMessage{}, nil
 }
 
 func (c *ClientServer) ChatUsers(ctx context.Context, chatID string) ([]string, error) {
 	c.mutex.Lock()
 	list := c.client.GetChatList()[chatID].ClientsIPsList()
 	c.mutex.Unlock()
+
+	log.Println("ChatUsers: chatID ", chatID, " resp: ", list)
 
 	if list != nil {
 		return list, nil
@@ -125,6 +134,8 @@ func (c *ClientServer) Chats(ctx context.Context) ([]*gql.Chat, error) {
 		})
 	}
 
+	log.Println("Chats: resp: ", gqlChats)
+
 	return gqlChats, nil
 }
 
@@ -134,16 +145,20 @@ func (c *ClientServer) MessagePosted(ctx context.Context, chatID string) (<-chan
 	messages := c.client.GetChatList()[chatID].MessagesChan
 	c.mutex.Unlock()
 
+	log.Println("MessagePosted: chatID ", chatID, " resp: ", messages)
+
 	return messages, nil
 }
 
 func (c *ClientServer) UserJoined(ctx context.Context, chatID string) (<-chan string, error) {
 	// TODO implement me
+	log.Println("UserJoined: chatID ", chatID)
 	return make(chan string, 1), nil
 }
 
 func (c *ClientServer) ChatCreated(ctx context.Context) (<-chan *gql.Chat, error) {
 	// TODO implement me
+	log.Println("ChatCreated: ")
 	return make(chan *gql.Chat, 1), nil
 }
 

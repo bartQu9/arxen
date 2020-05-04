@@ -4,7 +4,7 @@
         <app-chat-miniature v-for="chat of chats"
                             :key="chat.chatId"
                             :chat="chat"
-                            @click="openChat(chat)">
+                            @click.native="openChat(chat)">
         </app-chat-miniature>
     </div>
 </template>

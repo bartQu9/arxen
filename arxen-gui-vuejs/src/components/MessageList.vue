@@ -1,7 +1,7 @@
 <template>
     <div>
-        <div v-if="selectedChatId && selectedChatId.length && textMessages">
-            <app-message v-for="message of textMessages"
+        <div v-if="selectedChatId && selectedChatId.length && messages">
+            <app-message v-for="message of messages"
                          :key="message"
                          :message="message">
             </app-message>
@@ -9,7 +9,7 @@
         <div v-if="!selectedChatId">
             Empty
         </div>
-        <div v-if="!textMessages">No Messages</div>
+        <div v-if="!messages.length && selectedChatId.length">No Messages</div>
     </div>
 </template>
 
@@ -27,11 +27,11 @@
         },
         data() {
             return {
-                textMessages: [],
+                messages: [],
             };
         },
         apollo: {
-            textMessages() {
+            messages() {
                 return {
                     query: gql`
                     query($chatID: String!) {
@@ -43,7 +43,7 @@
                             }
                     }
                     `,
-                    variables: { chatID: this.props.selectedChatId },
+                    variables() { return { chatID: this.selectedChatId } },
                     subscribeToMore: {
                         document: gql`
                         subscription($chatID: String!) {
@@ -55,7 +55,7 @@
                             }
                         }`,
                         variables() {
-                            return {chatID: this.props.selectedChatId}
+                            return {chatID: this.selectedChatId}
                         },
                         updateQuery: (prev, {subscriptionData}) => {
                             if (!subscriptionData.data) {

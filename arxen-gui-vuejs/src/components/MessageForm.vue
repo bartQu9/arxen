@@ -9,7 +9,8 @@
                    v-model.trim="messageInput">
             <div class="input-group-append">
                 <button class="btn btn-outline-secondary"
-                        type="submit">Post</button>
+                        type="submit">Post
+                </button>
             </div>
         </div>
 
@@ -34,9 +35,9 @@
                 const messageInput = this.messageInput;
                 this.$apollo
                     .mutate({
-                        mutation: gql`mutation($chatID: String!, $text: String!) {postMessage(chatID: $chatID, text: $text) {textMessage}}`,
+                        mutation: gql`mutation($chatID: String!, $text: String!) {postMessage(chatID: $chatID, text: $text) { chatId user text timeStamp }}`,
                         variables: {
-                            chatID: this.props.selectedChatId,
+                            chatID: this.selectedChatId,
                             text: messageInput,
                         },
                     })

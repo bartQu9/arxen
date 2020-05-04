@@ -6,17 +6,18 @@ import gql from "graphql-tag";
                        :selectedChatId="selectedChatId"
         />
         <div class="col-10">
+            <div v-if="selectedChatId">
+                <div class="row mb-3">
+                    <app-message-form :selectedChatId="selectedChatId"/>
+                </div>
 
-            <div class="row mb-3">
-                <app-message-form :selectedChatId="selectedChatId"/>
+                <div class="row">
+                    <app-message-list class="col-12"
+                                      :selectedChatId="selectedChatId"
+                    />
+                </div>
             </div>
-
-            <div class="row">
-                <app-message-list class="col-12"
-                                  :selectedChatId="selectedChatId"
-                />
-            </div>
-
+            <div v-if="!selectedChatId">Select Chat</div>
         </div>
     </div>
 </template>

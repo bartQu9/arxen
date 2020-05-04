@@ -238,6 +238,10 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 		SetupPayload(payload.NewString(c.userIP, "1234")).
 		Resume().
 		Fragment(1024).
+		OnClose(func(err error) {
+			log.Println("connectToClient: connection with ", addr, " closed")
+			c.clientsIPs[addr] = false
+		}).
 		Transport(addr).
 		Start(context.Background())
 	if err != nil {
@@ -301,9 +305,9 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 			return mono.Just(pl)
 		}),
 		rsocket.RequestStream(func(pl payload.Payload) flux.Flux {
-			s := pl.DataUTF8()
-			m, _ := pl.MetadataUTF8()
-			log.Println("data:", s, "metadata:", m)
+			// s := pl.DataUTF8()
+			// m, _ := pl.MetadataUTF8()
+			// log.Println("data:", s, "metadata:", m)
 
 			// handle getHosts request
 			if dat, _ := pl.MetadataUTF8(); strings.EqualFold(dat, "CHAT_PARTICIPANTS_REQ") { // [chatID, REQ type]
@@ -515,10 +519,15 @@ func PayloadToGraphqlTextMessage(p payload.Payload) gql.TextMessage {
 
 	// TODO what if empty data
 
+	date, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", data["timeStamp"].(string))
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	return gql.TextMessage{
 		ChatID:    data["chatId"].(string),
 		User:      data["user"].(string),
-		TimeStamp: data["timeStamp"].(time.Time),
+		TimeStamp: date,
 		Text:      data["text"].(string),
 	}
 }
