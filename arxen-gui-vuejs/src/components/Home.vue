@@ -6,21 +6,11 @@ import gql from "graphql-tag";
                            @selectDiffrentChat="updateSelectedChat"
                            :selectedChatId="selectedChatId"
             />
-            <div class="col-10">
-                <div v-if="selectedChatId">
-                    <div class="row mb-3">
-                        <app-message-form :selectedChatId="selectedChatId"/>
-                    </div>
 
-                    <div class="row">
-                        <app-message-list class="col-12"
-                                          :selectedChatId="selectedChatId"
-                                          :textMessages="t"
-                        />
-                    </div>
-                </div>
-                <div v-if="!selectedChatId">Select Chat</div>
-            </div>
+            <app-message-list :selectedChatId="selectedChatId"
+                              :textMessages="t"
+                              v-if="selectedChatId"
+            />
         </div>
     </div>
 </template>
@@ -28,20 +18,20 @@ import gql from "graphql-tag";
 <script>
     import ChatList from '@/components/ChatList.vue';
     import MessageList from '@/components/MessageList.vue';
-    import MessageForm from '@/components/MessageForm.vue';
-    import { defaultThemeStyles, cssThemeVars } from '../themes';
+    //import MessageForm from '@/components/MessageForm.vue';
+    import {defaultThemeStyles, cssThemeVars} from '../themes';
     import locales from '../locales'
 
     export default {
         components: {
             'app-chat-list': ChatList,
             'app-message-list': MessageList,
-            'app-message-form': MessageForm,
+            //'app-message-form': MessageForm,
         },
         props: {
             height: {type: String, default: '600px'},
-            theme: { type: String, default: 'light' },
-            styles: { type: Object, default: () => ({}) },
+            theme: {type: String, default: 'light'},
+            styles: {type: Object, default: () => ({})},
         },
         data() {
             return {
@@ -74,13 +64,17 @@ import gql from "graphql-tag";
             }
         }
     };
+    // <app-message-form :selectedChatId="selectedChatId"
+    //:textMessages="t"/>
 </script>
 
 <style lang="scss">
     @import '../styles/index.scss';
+
     * {
         font-family: inherit;
     }
+
     .card-window {
         width: 100%;
         display: block;
@@ -94,13 +88,15 @@ import gql from "graphql-tag";
         border-radius: var(--chat-container-border-radius);
         box-shadow: var(--chat-container-box-shadow);
     }
-        .chat-container {
-            height: 100%;
-            display: flex;
-            textarea,
-            input[type='text'],
-            input[type='search'] {
-                -webkit-appearance: none;
+
+    .chat-container {
+        height: 100%;
+        display: flex;
+
+        textarea,
+        input[type='text'],
+        input[type='search'] {
+            -webkit-appearance: none;
         }
     }
 
