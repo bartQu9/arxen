@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"github.com/jjeffcaii/reactor-go/scheduler"
 	"github.com/rsocket/rsocket-go"
 	"github.com/rsocket/rsocket-go/payload"
 	"github.com/rsocket/rsocket-go/rx"
@@ -14,6 +15,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -47,6 +49,8 @@ type Client struct {
 
 	friendsList map[string]Friend // map[friendsNick]Friend
 	secretKey   string            // used for authentication
+
+	mutex 		sync.Mutex			// to prevent access to same data by two goroutines
 }
 
 func (c *Client) GetChatList() map[string]*chat.Chat {
@@ -126,14 +130,18 @@ func (c *Client) CreateChat(initList []string) *chat.Chat {
 	// not working if already connected to this user
 	// get all users IP I want to connect
 	for _, cli := range initList {
+		c.mutex.Lock()
 		if _, ok := c.clientsIPs[cli]; !ok {
 			c.clientsIPs[cli] = false
 		}
+		c.mutex.Unlock()
 	}
 
 	go c.chatMessagesHandler(tmpChat)
 
+	c.mutex.Lock()
 	c.chatList[chatIDstr] = tmpChat
+	c.mutex.Unlock()
 
 	// advert new chat
 	c.receivedPayloadChan <- payload.New([]byte(chatIDstr), c.getMetadataTag(CHAT_ADVERT_REQUEST))
@@ -183,8 +191,9 @@ func (c *Client) createSlaveChat(initList []string, chatIDstr string) {
 
 	go c.chatMessagesHandler(tmpChat)
 
-	log.Println("createSlaveChat: Created new Chat")
 	c.chatList[chatIDstr] = tmpChat
+
+	log.Println("createSlaveChat: Created new Chat")
 
 }
 
@@ -200,13 +209,17 @@ func (c *Client) connectionsHandler() {
 			// TODO can be written better
 			if c.sendDataList[addr] == nil {
 				log.Println("connectionsHandler: chan non existing - creating ", addr)
+				c.mutex.Lock()
 				ch := make(chan payload.Payload)
 				c.sendDataList[addr] = ch
+				c.mutex.Unlock()
 			}
 			if !status {
 				go c.connectToClient(c.sendDataList[addr], addr)
 				// after finished update record
+				c.mutex.Lock()
 				c.clientsIPs[addr] = true
+				c.mutex.Unlock()
 			}
 		}
 	}
@@ -222,13 +235,17 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 	// create tmp flux
 	// TODO problem: who is the target
 	// TODO add option of sending custom messages
+	// TODO make this flux never cancel!
 	f := flux.Create(func(ctx context.Context, s flux.Sink) {
 		//log.Println("STARTED sending new message")
 		for mess := range ch {
 			//log.Println("SENDING new message")
 			s.Next(mess)
 		}
+		log.Println("connectToClient: transmission completed")
 		s.Complete()
+	}).DoFinally(func(s rx.SignalType) {
+		log.Println("connectToClient: GOT SIGNAL ", s)
 	})
 
 	// new client
@@ -239,7 +256,7 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 		Resume().
 		Fragment(1024).
 		OnClose(func(err error) {
-			log.Println("connectToClient: connection with ", addr, " closed")
+			log.Println("connectToClient: connection with ", addr, " closed because ", err)
 			c.clientsIPs[addr] = false
 		}).
 		Transport(addr).
@@ -261,6 +278,12 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 			// TODO check if fixed
 			//c.chatList[tmpChatID].MessagesChan <- elem
 			c.receivedPayloadChan <- elem
+		}).DoOnComplete(func() {
+			log.Println("connectToClient: job completed")
+		}).DoOnError(func(e error) {
+			log.Println("connectToClient: ERROR occurred ", e)
+		}).DoFinally(func(s rx.SignalType) {
+			log.Println("connectToClient: finally ", s)
 		}).
 		BlockLast(context.Background())
 }
@@ -342,16 +365,18 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 			//c.CreateChat([]string{})
 
 			inputs.(flux.Flux).DoFinally(func(s rx.SignalType) {
-				log.Printf("signal type: %v", s)
+				log.Printf("responder: signal type: %v", s)
 				//close(receives)
+			}).SubscribeOn(scheduler.Elastic()).DoOnError(func(e error) {
+				log.Println("responder: ERROR ", e)
 			}).Subscribe(context.Background(), rx.OnNext(func(input payload.Payload) {
 
 				// TODO sort messages
 
-				log.Println(input)
+				// log.Println(input)
 
 				// TODO FIX ME ERROR HERE: "runtime error: invalid memory address or nil pointer dereference"
-				log.Println("GOT MESSAGE: ", input.DataUTF8())
+				log.Println("responder: GOT MESSAGE: ", input.DataUTF8())
 				// tmpChatID, _ := input.MetadataUTF8()
 				// c.chatList[tmpChatID].MessagesChan <- input
 
@@ -363,6 +388,8 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 					s.Next(mess)
 				}
 				s.Complete()
+			}).DoFinally(func(s rx.SignalType) {
+				log.Println("responder: Got signal ", s)
 			})
 		}),
 	)
@@ -463,7 +490,7 @@ func (c *Client) chatMessagesHandler(chat *chat.Chat) {
 
 		// forward to oneself and add to list
 		c.receivedPayloadChan <- payloadMessage
-		chat.TextMessageList = append(chat.TextMessageList, &newMessageToBeSend)
+		// chat.TextMessageList = append(chat.TextMessageList, &newMessageToBeSend)
 
 		log.Println("chatMessagesHandler: Message to be send: ", payloadMessage)
 
