@@ -2,6 +2,7 @@
 Kademlia DHT implementation
 """
 import json
+from time import time
 from secrets import randbits
 from threading import Thread
 from queue import Queue
@@ -14,8 +15,8 @@ class KadProperties:
     """
     Simply stores Kademlia properties as alpha or k params
     """
-    PARAM_ALPHA = 20
-    PARAM_K = 10
+    PARAM_ALPHA = 10
+    PARAM_K = 20
     PARAM_NAMESPACE_SIZE = 256
 
 
@@ -136,18 +137,20 @@ class KadRPC:
 
 class RequestRPC(KadRPC):
 
-    def __init__(self, rpc_command: str, command_arg: dict, *args, **kwargs):
+    def __init__(self, remote_node: Node, rpc_command: str, command_arg: dict, *args, **kwargs):
         self.rpc_command = rpc_command
         self.command_arg = command_arg
+        self.remote_node = remote_node
         super().__init__(rpc_type="REQUEST", append_part={"command": rpc_command, "arg": command_arg}, *args, **kwargs)
 
 
 class FindNodeRPC(RequestRPC):
-    def __init__(self, lookup_node_id: int, *args, **kwargs):
+    def __init__(self, lookup_node_id: int, remote_node: Node, *args, **kwargs):
         """
         lookup_node_id: node we're looking for
         """
-        super().__init__(rpc_command="FIND_NODE", command_arg={"node_id": str(lookup_node_id)}, *args, **kwargs)
+        super().__init__(rpc_command="FIND_NODE", command_arg={"node_id": str(lookup_node_id)},
+                         remote_node=remote_node, *args, **kwargs)
 
 
 class FindValueRPC(RequestRPC):
@@ -191,17 +194,22 @@ class KadTask(Thread):
     _KadTaskList = []
     _KadTaskCounter = 0
 
-    def __init__(self, parent=None, facility: str = ""):
+    def __init__(self, this_node: Node, routing_table: _KadRoutingTable,
+                 parent=None, facility: str = "", egress_queue: Queue = None):
         super().__init__()
         self.setName("KadTask(Thread)-{}-{}".format(facility, KadTask._KadTaskCounter))
         KadTask._KadTaskCounter += 1
         KadTask._KadTaskList.append(self)
+        self.this_node = this_node
+        self.routing_table = routing_table
 
         self.children_tasks = []
         self.parentTask = parent
 
         self.ingress_queue = Queue()
-        self.egress_queue = Queue()
+        self.egress_queue = egress_queue
+
+        debug("Initialized {}".format(self.getName()))
 
     @staticmethod
     def get_existing_kad_tasks() -> list:
@@ -213,15 +221,60 @@ class KadTask(Thread):
         KadTask._KadTaskCounter -= 1
 
 
-class FindNodeTask(KadTask):
-    def __init__(self, node_id: int, *args, **kwargs):
+class KadManageableTask(KadTask):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def spawn_task(self, task: KadTask):
+        debug("{} spawns {}".format(self, task))
+        # attaching queue to allow pass children results to its parent
+        if task.egress_queue is None:
+            task.egress_queue = self.ingress_queue
+
+        self.children_tasks.append(task)
+        task.start()
+
+    def send_results(self, results):
+        """
+        push results to egress queue
+        :param results:
+        :return:
+        """
+        if results.__iter__:
+            for res in results:
+                self.egress_queue.put(res)
+        else:
+            self.egress_queue.put(results)
+
+    def join_queue(self, timeout: int = 60):
+        """
+        simply waits for data in ingress queue and return first value
+        """
+        self.ingress_queue.get(block=True, timeout=timeout)
+
+
+class FindNodeTask(KadManageableTask):
+    def __init__(self, node_id: int, entry_point: bool = False, *args, **kwargs):
         """
         :param node_id: node we are trying to find
+        :param EntryPoint: Flag is set true if this task is used to initialize performing lookup process
         """
-        super().__init__(facility="FindNodeTask")
+        self.lookup_node = node_id
+        self.entry_point = entry_point
+        super().__init__(facility="FindNodeTask", *args, **kwargs)
 
     def run(self):
-        pass
+        debug("running {}".format(self))
+        nearest_nodes = []
+        queried_nodes = []
+
+        if self.entry_point:
+            # First select my nearest nodes
+            my_nearest_nodes = self.routing_table.route_to(self.lookup_node)
+            for node in my_nearest_nodes:
+                self.spawn_task(FindNodeTask(self.lookup_node))
+
+
 
 
 class KadEngine:
