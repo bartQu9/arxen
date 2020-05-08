@@ -47,8 +47,8 @@ type Client struct {
 	sendDataList        map[string]chan payload.Payload // payload and target chat format: map[clientIP] payload(message, chatID)
 	receivedPayloadChan chan payload.Payload            // channel with all incoming payloads
 
-	friendsList map[string]Friend // map[friendsNick]Friend
-	secretKey   string            // used for authentication
+	friendsList map[string]Friend 						// map[friendsNick]Friend
+	secretKey   string           						// used for authentication
 
 	mutex 		sync.Mutex			// to prevent access to same data by two goroutines
 }
@@ -184,14 +184,18 @@ func (c *Client) createSlaveChat(initList []string, chatIDstr string) {
 	// not working if already connected to this user
 	// get all users IP I want to connect
 	for _, cli := range initList {
+		c.mutex.Lock()
 		if _, ok := c.clientsIPs[cli]; !ok {
 			c.clientsIPs[cli] = false
 		}
+		c.mutex.Unlock()
 	}
 
 	go c.chatMessagesHandler(tmpChat)
 
+	c.mutex.Lock()
 	c.chatList[chatIDstr] = tmpChat
+	c.mutex.Unlock()
 
 	log.Println("createSlaveChat: Created new Chat")
 
@@ -427,12 +431,15 @@ func (c *Client) receivedPayloadHandler() {
 				// send to appropriate chat
 				tmpTextMessage := PayloadToGraphqlTextMessage(payl)
 				c.chatList[dest.(string)].MessagesChan <- &tmpTextMessage
+				log.Println("receivedPayloadHandler: After CHAN")
 				c.chatList[dest.(string)].TextMessageList = append(c.chatList[dest.(string)].TextMessageList, &tmpTextMessage)
 				//<- chat.TextMessage{
 				//	Data:      payl.DataUTF8(),
 				//	Author:    metadata["source"].(string),
 				//	Timestamp: time.Now(),
 				//}
+
+				log.Println("receivedPayloadHandler: Left CHAT_MESSAGE section")
 			}
 		case CHAT_PARTICIPANTS_REQUEST:
 			// send all participating clients IPs to requester
@@ -562,6 +569,11 @@ func PayloadToGraphqlTextMessage(p payload.Payload) gql.TextMessage {
 // converts text message format to bytes
 // probably redundant in the future
 func GraphqlTextMessageToByte(message gql.TextMessage) []byte {
+	jsonMessage, err := json.Marshal(message)
+	if err != nil {
+		log.Fatalln("GraphqlTextMessageToByte: ", err)
+	}
+	log.Println("GraphqlTextMessageToByte: ",jsonMessage)
 	return []byte(`{"chatId": "` + message.ChatID + `", "user": "` + message.User + `", "timeStamp": "` + message.TimeStamp.String() + `", "text": "` + message.Text + `" }`)
 }
 

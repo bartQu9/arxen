@@ -24,6 +24,22 @@ type ClientServer struct {
 	mutex  sync.Mutex
 }
 
+func (c *ClientServer) ClientWritingAlert(ctx context.Context, chatID string) (<-chan *string, error) {
+	panic("implement me")
+}
+
+func (c *ClientServer) FetchMessages(ctx context.Context, chatID string, numOfMessages int) ([]*gql.TextMessage, error) {
+	panic("implement me")
+}
+
+func (c *ClientServer) ClientWriting(ctx context.Context, chatID string, userID string) (*string, error) {
+	panic("implement me")
+}
+
+func (c *ClientServer) ChangeChatAvatar(ctx context.Context, chatID string, avatarAddr string) (*string, error) {
+	panic("implement me")
+}
+
 func NewClientServer(client *client.Client) (*ClientServer, error) {
 	return &ClientServer{
 		client: client,

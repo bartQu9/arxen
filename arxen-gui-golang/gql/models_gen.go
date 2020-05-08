@@ -7,8 +7,11 @@ import (
 )
 
 type Chat struct {
-	ChatID         string   `json:"chatId"`
-	ClientsIPsList []string `json:"clientsIPsList"`
+	ChatID         string       `json:"chatId"`
+	ClientsIPsList []string     `json:"clientsIPsList"`
+	LatestMessage  *TextMessage `json:"latestMessage"`
+	ChatAvatar     *string      `json:"chatAvatar"`
+	ClientWriting  *string      `json:"clientWriting"`
 }
 
 type TextMessage struct {

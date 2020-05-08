@@ -17,10 +17,10 @@ Vue.config.productionTip = false;
 const localAddr = '192.168.99.100';
 
 const httpLink = new HttpLink({
-  uri: 'http://'+localAddr+':8086/graphql',
+  uri: 'http://'+localAddr+':8085/graphql',
 });
 const wsLink = new WebSocketLink({
-  uri: 'ws://'+localAddr+':8086/graphql',
+  uri: 'ws://'+localAddr+':8085/graphql',
   options: {
     reconnect: true,
   },
