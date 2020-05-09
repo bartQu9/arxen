@@ -1,4 +1,5 @@
 import gql from "graphql-tag";
+import gql from "graphql-tag";
 <template>
     <div class="card-window" :style="[{ height }, cssVars]">
         <div class="chat-container">
@@ -10,6 +11,7 @@ import gql from "graphql-tag";
             <app-message-list :selectedChatId="selectedChatId"
                               :textMessages="t"
                               v-if="selectedChatId"
+                              :userName="getUserName"
             />
         </div>
     </div>
@@ -19,6 +21,7 @@ import gql from "graphql-tag";
     import ChatList from '@/components/ChatList.vue';
     import MessageList from '@/components/MessageList.vue';
     //import MessageForm from '@/components/MessageForm.vue';
+    import gql from 'graphql-tag';
     import {defaultThemeStyles, cssThemeVars} from '../themes';
     import locales from '../locales'
 
@@ -37,7 +40,17 @@ import gql from "graphql-tag";
             return {
                 chatList: [],
                 selectedChatId: '',
+                getUserName: [],
             };
+        },
+        apollo: {
+            getUserName() {
+                return {
+                    query: gql`
+                    query { getUserName }`,
+                    variables() {},
+                };
+            },
         },
         computed: {
             t() {

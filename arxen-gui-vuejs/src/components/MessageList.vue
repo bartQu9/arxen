@@ -41,8 +41,10 @@
 
                     <div v-if="selectedChatId && selectedChatId.length && messages">
                         <app-message v-for="message of messages"
-                                     :key="message"
-                                     :message="message">
+                                     :key="message.timeStamp"
+                                     :message="message"
+                                     :userName="userName"
+                        >
                         </app-message>
                     </div>
 
@@ -60,7 +62,7 @@
 
         <div ref="roomFooter" class="room-footer">
             <div class="box-footer">
-            <textarea
+            <textarea ref="roomTextarea"
                     :placeholder="textMessages.TYPE_MESSAGE"
                     v-model="messageInput"
                     @input="onChangeInput"
@@ -101,6 +103,7 @@
             selectedChatId: {type: String},
             messagesLoaded: {type: Boolean, default: true},
             textMessages: {type: Object, default: null},
+            userName: {type: String}
         },
         data() {
             return {

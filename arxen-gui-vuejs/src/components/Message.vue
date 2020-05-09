@@ -3,7 +3,7 @@
         <div class="card-date" v-if="showDate" v-html="message.timeStamp"></div>
         <div
                 class="message-box"
-                :class="{ 'offset-current': message.user === currentUserId }"
+                :class="{ 'offset-current': message.user === userName }"
         >
             <div
                     class="message-container"
@@ -55,6 +55,7 @@
             message: {
                 type: Object,
             },
+            userName: {type: String},
         },
         methods: {
             isMessageHover() {

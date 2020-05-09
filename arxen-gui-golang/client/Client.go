@@ -9,6 +9,7 @@ import (
 	"github.com/rsocket/rsocket-go/rx"
 	"github.com/rsocket/rsocket-go/rx/flux"
 	"github.com/rsocket/rsocket-go/rx/mono"
+	logger "github.com/sirupsen/logrus"
 	"log"
 	"main/chat"
 	"main/gql"
@@ -420,18 +421,20 @@ func (c *Client) receivedPayloadHandler() {
 		// TODO add authentication process for request (client not participating in chat can get its participants)
 
 		// TODO implement me till the end
-		log.Println("receivedPayloadHandler: INCOMING: ", payl)
+		// log.Println("receivedPayloadHandler: INCOMING: ", payl)
+
+		logger.WithField("payl", payl).Trace("receivedPayloadHandler: INCOMING")
 
 		switch metadata["type"].(string) {
 		case CHAT_MESSAGE:
 			// TODO handle incoming messages
 			// the source
 			// authentication
-			if dest := metadata["chatID"]; dest != nil {
+			if dest := metadata["chatId"]; dest != nil {
 				// send to appropriate chat
 				tmpTextMessage := PayloadToGraphqlTextMessage(payl)
 				c.chatList[dest.(string)].MessagesChan <- &tmpTextMessage
-				log.Println("receivedPayloadHandler: After CHAN")
+				logger.Trace("receivedPayloadHandler: After CHAN")
 				c.chatList[dest.(string)].TextMessageList = append(c.chatList[dest.(string)].TextMessageList, &tmpTextMessage)
 				//<- chat.TextMessage{
 				//	Data:      payl.DataUTF8(),
@@ -439,7 +442,7 @@ func (c *Client) receivedPayloadHandler() {
 				//	Timestamp: time.Now(),
 				//}
 
-				log.Println("receivedPayloadHandler: Left CHAT_MESSAGE section")
+				logger.Trace("receivedPayloadHandler: Left CHAT_MESSAGE section")
 			}
 		case CHAT_PARTICIPANTS_REQUEST:
 			// send all participating clients IPs to requester
@@ -491,13 +494,12 @@ func (c *Client) receivedPayloadHandler() {
 // handles forwarding messages from particular chat
 func (c *Client) chatMessagesHandler(chat *chat.Chat) {
 	for newMessageToBeSend := range chat.SendMessageChan {
+
 		// transform message
+		payloadMessage := payload.New([]byte(newMessageToBeSend.Text), c.getMetadataTag(CHAT_MESSAGE, chat.ChatID, newMessageToBeSend.User, newMessageToBeSend.TimeStamp.String()))
 
-		payloadMessage := payload.New(GraphqlTextMessageToByte(newMessageToBeSend), c.getMetadataTag(CHAT_MESSAGE, chat.ChatID))
-
-		// forward to oneself and add to list
+		// forward to oneself
 		c.receivedPayloadChan <- payloadMessage
-		// chat.TextMessageList = append(chat.TextMessageList, &newMessageToBeSend)
 
 		log.Println("chatMessagesHandler: Message to be send: ", payloadMessage)
 
@@ -525,11 +527,11 @@ func (c *Client) getMetadataTag(args ...string) []byte {
 		}
 		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `","chatID":"` + args[1] + `"}`)
 	case CHAT_MESSAGE:
-		// args[1]: chatID
-		if len(args) < 2 {
+		// args[1]: chatID, args[2]: user, args[3]: timeStamp
+		if len(args) < 4 {
 			panic("getMetadataTag: Too few arguments")
 		}
-		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `", "chatID":"` + args[1] + `"}`)
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `","chatId":"` + args[1] + `", "user":"` + args[2] + `", "timeStamp":"` + args[3] + `"}`)
 	case CHAT_ADVERT_REQUEST:
 		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `"}`)
 	case CHAT_ADVERT:
@@ -541,28 +543,41 @@ func (c *Client) getMetadataTag(args ...string) []byte {
 }
 
 // Convert incoming payload to TextMessage (defined in gql module)
-// CHAT_MESSAGE:			  {message,{source, type, chatID}}
-// where "message" contains {user, timeStamp, text, chatId}
+// CHAT_MESSAGE:			  {text,{source, type, chatID/chatId, user, timeStamp}}
+// where text is part of TextMessage
 func PayloadToGraphqlTextMessage(p payload.Payload) gql.TextMessage {
-	dataJson := p.Data()
-	var data map[string]interface{}
-	if err := json.Unmarshal(dataJson, &data); err != nil {
-		// TODO better handle error
+	// TODO better solution for escaping json
+
+	tmpMetadata, _ := p.Metadata()
+	var metadata map[string]interface{}
+	//
+	//dataJson, err := strconv.Unquote(string(tmpJson))
+	//if err != nil {
+	//	logger.WithError(err).Fatal("PayloadToGraphqlTextMessage: dataJson")
+	//}
+
+	if err := json.Unmarshal(tmpMetadata, &metadata); err != nil {
 		panic(err)
 	}
 
 	// TODO what if empty data
 
-	date, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", data["timeStamp"].(string))
+	date, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", metadata["timeStamp"].(string))
 	if err != nil {
 		log.Fatalln(err)
 	}
 
+	var chatID string
+
+	if chatID :=  metadata["chatId"].(string); len(chatID) == 0 {
+		chatID = metadata["chatID"].(string)
+	}
+
 	return gql.TextMessage{
-		ChatID:    data["chatId"].(string),
-		User:      data["user"].(string),
+		ChatID:    chatID,
+		User:      metadata["user"].(string),
 		TimeStamp: date,
-		Text:      data["text"].(string),
+		Text:      p.DataUTF8(),
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 	"github.com/99designs/gqlgen/handler"
 	"github.com/gorilla/websocket"
 	"github.com/rs/cors"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"main/chat"
 	"main/client"
 	"main/gql"
@@ -24,12 +24,45 @@ type ClientServer struct {
 	mutex  sync.Mutex
 }
 
+func (c *ClientServer) GetFriendList(ctx context.Context) ([]*string, error) {
+	panic("implement me")
+}
+
+func (c *ClientServer) GetUserName(ctx context.Context) (string, error) {
+	return c.client.GetUserID(), nil
+}
+
+func (c *ClientServer) AddFriend(ctx context.Context, userUUID string) (*string, error) {
+	panic("implement me")
+}
+
+func (c *ClientServer) ChangeNick(ctx context.Context, userNick string) (*string, error) {
+	panic("implement me")
+}
+
 func (c *ClientServer) ClientWritingAlert(ctx context.Context, chatID string) (<-chan *string, error) {
 	panic("implement me")
 }
 
 func (c *ClientServer) FetchMessages(ctx context.Context, chatID string, numOfMessages int) ([]*gql.TextMessage, error) {
-	panic("implement me")
+	// find chat and forward message
+	c.mutex.Lock()
+	textList := c.client.GetChatList()[chatID].TextMessageList[0:numOfMessages]
+	c.mutex.Unlock()
+
+	//log.Println("FetchMessages: chatID ", chatID, " resp: ", textList)
+
+	log.WithFields(log.Fields{
+		"chatID": chatID,
+		"textList": textList,
+	}).Debug("FetchMessages:")
+
+	if textList != nil {
+		return textList, nil
+	}
+
+	//return nil, errors.New("text messages list could be not returned")
+	return []*gql.TextMessage{}, nil
 }
 
 func (c *ClientServer) ClientWriting(ctx context.Context, chatID string, userID string) (*string, error) {
@@ -69,7 +102,7 @@ func (c *ClientServer) Serve(port int) error {
 	// TODO add more routes
 
 	handler := cors.AllowAll().Handler(mux)
-	log.Println("Serving")
+	log.Info("Serving")
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), handler)
 }
 
@@ -86,7 +119,12 @@ func (c *ClientServer) PostMessage(ctx context.Context, chatID string, text stri
 	c.client.GetChatList()[chatID].SendMessageChan <- m
 	c.mutex.Unlock()
 
-	log.Println("PostMessage: chatID ", chatID, " text \"", text, "\", resp: ", m)
+	//log.Println("PostMessage: chatID ", chatID, " text \"", text, "\", resp: ", m)
+
+	log.WithFields(log.Fields{
+		"chatID": chatID,
+		"resp": text,
+	}).Debug("PostMessage:")
 
 	// TODO add error handle
 	return &m, nil
@@ -100,7 +138,13 @@ func (c *ClientServer) CreateChat(ctx context.Context, users []string) (*gql.Cha
 		ClientsIPsList: ch.ClientsIPsList(),
 	}
 
-	log.Println("CreateChat: users ", users, " resp: ", tmpChat.ChatID)
+	//log.Println("CreateChat: users ", users, " resp: ", tmpChat.ChatID)
+
+	log.WithFields(log.Fields{
+		"users": users,
+		"resp": tmpChat.ChatID,
+	}).Debug("CreateChat:")
+
 
 	return tmpChat, nil
 }
@@ -111,7 +155,12 @@ func (c *ClientServer) Messages(ctx context.Context, chatID string) ([]*gql.Text
 	textList := c.client.GetChatList()[chatID].TextMessageList
 	c.mutex.Unlock()
 
-	log.Println("Messages: chatID ", chatID, " resp: ", textList)
+	// log.Println("Messages: chatID ", chatID, " resp: ", textList)
+
+	log.WithFields(log.Fields{
+		"chatID": chatID,
+		"resp": textList,
+	}).Debug("Messages:")
 
 	if textList != nil {
 		return textList, nil
@@ -126,7 +175,12 @@ func (c *ClientServer) ChatUsers(ctx context.Context, chatID string) ([]string, 
 	list := c.client.GetChatList()[chatID].ClientsIPsList()
 	c.mutex.Unlock()
 
-	log.Println("ChatUsers: chatID ", chatID, " resp: ", list)
+	// log.Println("ChatUsers: chatID ", chatID, " resp: ", list)
+
+	log.WithFields(log.Fields{
+		"chatID": chatID,
+		"resp": list,
+	}).Debug("ChatUsers:")
 
 	if list != nil {
 		return list, nil
@@ -150,7 +204,12 @@ func (c *ClientServer) Chats(ctx context.Context) ([]*gql.Chat, error) {
 		})
 	}
 
-	log.Println("Chats: resp: ", gqlChats)
+	// log.Println("Chats: resp: ", gqlChats)
+
+	log.WithFields(log.Fields{
+		"resp": gqlChats,
+	}).Debug("Chats:")
+
 
 	return gqlChats, nil
 }
@@ -161,14 +220,24 @@ func (c *ClientServer) MessagePosted(ctx context.Context, chatID string) (<-chan
 	messages := c.client.GetChatList()[chatID].MessagesChan
 	c.mutex.Unlock()
 
-	log.Println("MessagePosted: chatID ", chatID, " resp: ", messages)
+	// log.Println("MessagePosted: chatID ", chatID, " resp: ", messages)
+
+	log.WithFields(log.Fields{
+		"chatID": chatID,
+		"resp": messages,
+	}).Debug("MessagePosted:")
 
 	return messages, nil
 }
 
 func (c *ClientServer) UserJoined(ctx context.Context, chatID string) (<-chan string, error) {
 	// TODO implement me
-	log.Println("UserJoined: chatID ", chatID)
+	// log.Println("UserJoined: chatID ", chatID)
+
+	log.WithFields(log.Fields{
+		"chatID": chatID,
+	}).Debug("UserJoined:")
+
 	return make(chan string, 1), nil
 }
 

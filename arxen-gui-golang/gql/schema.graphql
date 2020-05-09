@@ -21,7 +21,8 @@ type Mutation {
     createChat(users: [String!]!): Chat
     clientWriting(chatID: String!, userId: String!): String
     changeChatAvatar(chatID: String!, avatarAddr: String!): String
-    # changeNick(userNick: String!): String
+    changeNick(userNick: String!): String
+    addFriend(userUUID: String!): String
 }
 
 type Query {
@@ -29,8 +30,8 @@ type Query {
     chatUsers(chatID: String!): [String!]!
     chats: [Chat]!
     fetchMessages(chatID: String!, numOfMessages: Int!): [TextMessage!]
-    # getFriendList: [String]
-    # getUserName: String!
+    getFriendList: [String]
+    getUserName: String!
 }
 
 type Subscription {
