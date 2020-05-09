@@ -5,6 +5,11 @@
                 class="room-avatar"
                 :style="{ 'background-image': `url('${chat.avatar}')` }"
         ></div>
+        <div
+                v-if="!chat.avatar"
+                class="room-avatar"
+                :style="{ 'background-image': `url('${missingAvatarUrl}')` }"
+        ></div>
         <div class="name-container text-ellipsis">
             <div class="title-container">
                 <div class="room-name text-ellipsis" v-html="chat.chatId"></div>
@@ -19,12 +24,19 @@
 </template>
 
 <script>
+    import {missingAvatarUrl} from '@/themes';
+
     export default {
         name: "ChatMiniature",
         props: {
             chat: {
                 type: Object,
             },
+        },
+        data() {
+            return {
+                missingAvatarUrl,
+            }
         },
     }
 

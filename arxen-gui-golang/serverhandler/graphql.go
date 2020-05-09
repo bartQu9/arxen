@@ -13,6 +13,7 @@ import (
 	"main/client"
 	"main/gql"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -96,8 +97,15 @@ func (c *ClientServer) Serve(port int) error {
 	mux.Handle("/playground", handler.Playground("GraphQL", GRAPHQL_ROUTE))
 
 	mux.HandleFunc("/test", func(writer http.ResponseWriter, request *http.Request) {
-		writer.Write([]byte(`Hello`))
+		_, err := writer.Write([]byte(`Hello`))
+		if err != nil {
+			log.WithError(err).Error("Serve:")
+		}
 	})
+
+	// TODO refactor to configuration
+	fileServer := http.FileServer(http.Dir("public/resources"))
+	mux.Handle("/static/", http.StripPrefix(strings.TrimRight("/static/", "/"), fileServer))
 
 	// TODO add more routes
 

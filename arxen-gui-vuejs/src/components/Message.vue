@@ -32,7 +32,7 @@
                     <span v-html="message.text"></span>
 
                     <div class="text-timestamp">
-                        <span v-html="message.timeStamp"></span>
+                        <span v-html="humanDate(message.timeStamp)"></span>
                     </div>
                 </div>
             </div>
@@ -42,6 +42,8 @@
 </template>
 
 <script>
+    import { parseJSON, formatDistance } from 'date-fns'
+
     export default {
         name: "Message",
         // tmp solution
@@ -62,6 +64,13 @@
                 return false
                 // this.editedMessage._id === this.message._id ||
                 // this.hoverMessageId === this.message._id
+            },
+            humanDate(s) {
+                // in GoLang time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", metadata["timeStamp"].(string))
+                console.log(s);
+                let res = parseJSON( s, '2006-01-02 15:04:05.999999999 -0700 MST', new Date());
+                console.log(res);
+                return formatDistance(res, new Date()) + ' ago';
             },
         },
         computed: {

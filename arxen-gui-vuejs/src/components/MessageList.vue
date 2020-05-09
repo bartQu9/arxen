@@ -1,6 +1,16 @@
 <template>
     <div class="col-messages" v-show="selectedChatId">
         <div class="room-header app-border-b">
+            <div
+                    v-if="chatAvatar"
+                    class="room-avatar"
+                    :style="{ 'background-image': `url('${chatAvatar}')` }"
+            ></div>
+            <div
+                    v-if="!chatAvatar"
+                    class="room-avatar"
+                    :style="{ 'background-image': `url('${missingAvatarUrl}')` }"
+            ></div>
             <div class="room-wrapper">
                 <div class="room-name" v-html="selectedChatId"></div>
             </div>
@@ -20,7 +30,7 @@
                                 class="text-started"
                                 v-if="showMessagesStarted"
                                 v-html="
-								textMessages.CONVERSATION_STARTED + ' ' + messages[0].timeStamp
+								textMessages.CONVERSATION_STARTED + ' ' + humanDate(messages[0].timeStamp)
 							"
                         ></div>
                     </transition>
@@ -90,6 +100,8 @@
     import Loader from "@/components/Loader";
     import InfiniteLoading from 'vue-infinite-loading'
     import SvgIcon from "@/components/SvgIcon";
+    import {missingAvatarUrl} from '@/themes';
+    import { parseJSON, formatRelative } from 'date-fns'
 
     export default {
         name: "MessageList",
@@ -113,6 +125,8 @@
                 scrollIcon: false,
                 messages: [],
                 messageInput: '',
+                missingAvatarUrl,
+                chatAvatar: '',
             };
         },
         apollo: {
@@ -218,6 +232,13 @@
             onChangeInput() {
                 this.resizeTextarea();
                 //this.$emit('typingMessage', this.message)
+            },
+            humanDate(s) {
+                // in GoLang time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", metadata["timeStamp"].(string))
+                console.log(s);
+                let res = parseJSON( s, '2006-01-02 15:04:05.999999999 -0700 MST', new Date());
+                console.log(res);
+                return formatRelative(res, new Date());
             },
         },
         computed: {

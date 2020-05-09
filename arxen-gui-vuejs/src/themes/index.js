@@ -223,6 +223,10 @@ export const defaultThemeStyles = {
     }
 }
 
+const localAddr = '192.168.99.100';
+
+export const missingAvatarUrl = 'http://'+localAddr+':8085/static/256px-Missing_avatar.png';
+
 export const cssThemeVars = ({
                                  general,
                                  container,
