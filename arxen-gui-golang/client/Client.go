@@ -9,6 +9,7 @@ import (
 	"github.com/rsocket/rsocket-go/rx"
 	"github.com/rsocket/rsocket-go/rx/flux"
 	"github.com/rsocket/rsocket-go/rx/mono"
+	"github.com/google/uuid"
 	logger "github.com/sirupsen/logrus"
 	"log"
 	"main/chat"
@@ -48,8 +49,8 @@ type Client struct {
 	sendDataList        map[string]chan payload.Payload // payload and target chat format: map[clientIP] payload(message, chatID)
 	receivedPayloadChan chan payload.Payload            // channel with all incoming payloads
 
-	friendsList map[string]Friend 						// map[friendsNick]Friend
-	secretKey   string           						// used for authentication
+	FriendsList map[string]Friend // map[friendsNick]Friend
+	secretKey   string            // used for authentication
 
 	mutex 		sync.Mutex			// to prevent access to same data by two goroutines
 }
@@ -83,6 +84,7 @@ func NewClient() *Client {
 	_chatList := make(map[string]*chat.Chat)
 	_sendMessageList := make(map[string]chan payload.Payload)
 	_receivedPayloadChan := make(chan payload.Payload)
+	_FriendsList := make(map[string]Friend)
 
 	return &Client{
 		userIP:              userAddr,
@@ -91,6 +93,7 @@ func NewClient() *Client {
 		chatList:            _chatList,
 		sendDataList:        _sendMessageList,
 		receivedPayloadChan: _receivedPayloadChan,
+		FriendsList:		 _FriendsList,
 	}
 }
 
@@ -117,8 +120,9 @@ func (c *Client) eventListener() {
 // method used to create new chat
 func (c *Client) CreateChat(initList []string) *chat.Chat {
 
-	// TODO add chat ID generator
-	chatIDstr := "123"
+	chatIDstr := uuid.New().String()
+
+	logger.WithField("chatID", chatIDstr).Info("CreateChat: creating new chat")
 
 	// init new chat with complete users list
 	// add userIP ex"tcp://10.5.0.2:7878" to that list
@@ -237,6 +241,32 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 
 	// in advanced scenario ask host for chat clients ips
 
+	// new client
+	// TODO change literals to constants
+	cli, err := rsocket.
+		Connect().
+		SetupPayload(payload.NewString(c.userIP, "1234")).
+		Resume().
+		Fragment(1024).
+		OnClose(func(err error) {
+			log.Println("connectToClient: connection with ", addr, " closed because ", err)
+			c.clientsIPs[addr] = false
+		}).
+		Transport(addr).
+		Start(context.Background())
+	if err != nil {
+		logger.WithField("err", err).Warn("Connection Error occurred")
+		switch err.Error() {
+		case "Connection Error occurred":
+			logger.WithField("err", err.Error()).Warn("connectToClient: connection was not established")
+			return
+		default:
+			panic(err)
+		}
+	}
+
+	defer cli.Close()
+
 	// create tmp flux
 	// TODO problem: who is the target
 	// TODO add option of sending custom messages
@@ -253,24 +283,6 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 		log.Println("connectToClient: GOT SIGNAL ", s)
 	})
 
-	// new client
-	// TODO change literals to constants
-	cli, err := rsocket.
-		Connect().
-		SetupPayload(payload.NewString(c.userIP, "1234")).
-		Resume().
-		Fragment(1024).
-		OnClose(func(err error) {
-			log.Println("connectToClient: connection with ", addr, " closed because ", err)
-			c.clientsIPs[addr] = false
-		}).
-		Transport(addr).
-		Start(context.Background())
-	if err != nil {
-		panic(err)
-	}
-
-	defer cli.Close()
 
 	log.Println("REQUESTING CHANNEL WITH ", addr)
 
@@ -683,10 +695,24 @@ func (c *Client) TestSetup() {
 
 	participants := []string{"tcp://127.0.0.3:7878"}
 
+	c.FriendsList["tcp://127.0.0.3:7878"] = Friend{
+		Name:     "tcp://127.0.0.3:7878",
+		FriendIP: "tcp://127.0.0.3:7878",
+	}
+
+	logger.Debug("TestSetup: friendslist = ", c.FriendsList)
+
 	if value, ok := os.LookupEnv("SAMPLE_CHAT_SETUP_ADDR"); ok {
 		participants = strings.Split(value, ",")
-		log.Println("TestSetup: chat setup/ connect to = " + participants[0])
+		logger.Info("TestSetup: chat setup connect to = ", participants[0])
+
+		c.FriendsList[participants[0]] = Friend{
+			Name:     participants[0],
+			FriendIP: participants[0],
+		}
 	}
+
+	logger.Debug("TestSetup: and now, friendslist = ", c.FriendsList)
 
 	if value, ok := os.LookupEnv("MAIN_MACHINE"); ok && value == "1" {
 		time.Sleep(5 * time.Second)

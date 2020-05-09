@@ -1,31 +1,86 @@
 <template>
     <div class="rooms-container app-border-r">
-        <h2>Chats</h2>
-        <slot name="rooms-header"></slot>
-        <div class="box-search">
-            <div class="icon-search" v-if="chats.length">
-                <svg-icon name="search"/>
+        <div v-if="!showFriendList">
+            <h2>Chats</h2>
+            <slot name="rooms-header"></slot>
+            <div class="box-search">
+                <div class="icon-search" v-if="chats.length">
+                    <svg-icon name="search"/>
+                </div>
+                <input
+                        type="search"
+                        :placeholder="chats.SEARCH"
+                        autocomplete="off"
+                        @input="searchChats"
+                        v-show="chats.length"
+                />
+                <div v-if="showAddChat" class="svg-button add-icon" @click="addChatDialog">
+                    <svg-icon name="add"/>
+                </div>
             </div>
-            <input
-                    type="search"
-                    :placeholder="chats.SEARCH"
-                    autocomplete="off"
-                    @input="searchChats"
-                    v-show="chats.length"
-            />
-            <div v-if="showAddChat" class="svg-button add-icon" @click="addChat">
-                <svg-icon name="add"/>
+
+            <loader :show="loadingChats"></loader>
+
+            <div v-if="!loadingChats" class="room-list">
+                <app-chat-miniature v-for="chat of chats"
+                                    :key="chat.chatId"
+                                    :chat="chat"
+                                    @click.native="openChat(chat)">
+                </app-chat-miniature>
             </div>
         </div>
 
-        <loader :show="loadingChats"></loader>
+        <div v-if="showFriendList">
+            <h2>Friends</h2>
+            <slot name="rooms-header"></slot>
 
-        <div v-if="!loadingChats" class="room-list">
-            <app-chat-miniature v-for="chat of chats"
-                                :key="chat.chatId"
-                                :chat="chat"
-                                @click.native="openChat(chat)">
-            </app-chat-miniature>
+            <div
+                    class="svg-button toggle-button"
+                    :class="{ 'rotate-icon': !showRoomsList && !isMobile }"
+                    @click="showFriendList = !showFriendList"
+            >
+                <svg-icon name="toggle"/>
+            </div>
+
+            <div class="box-search">
+                <div class="icon-search" v-if="chats.length">
+                    <svg-icon name="search"/>
+                </div>
+                <input
+                        type="search"
+                        :placeholder="chats.SEARCH"
+                        autocomplete="off"
+                        @input="searchFriends"
+                        v-show="chats.length"
+                />
+            </div>
+
+            <loader :show="loadingFriends"></loader>
+
+            <div v-if="!loadingChats" class="room-list">
+                <div v-for="friend in getFriendList"
+                     :key="friend">
+                    <div class="box-search">
+                        <input type="checkbox" v-model="selectedFriends" :value="friend"/>
+                        <label>{{friend}}</label>
+                    </div>
+                </div>
+            </div>
+
+            <div ref="roomFooter" class="room-footer">
+                <div class="box-footer">
+                    <div class="icon-textarea">
+                        <div
+                                @click="onCreateNewChat"
+                                class="svg-button"
+                                :class="{ 'send-disabled': inputDisabled }"
+                        >
+                            <svg-icon name="send" :param="inputDisabled ? 'disabled' : ''"/>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
 </template>
@@ -45,27 +100,64 @@
         },
         data() {
             return {
+                selectedFriends: [],
                 chats: [],
+                getFriendList: [],
             };
         },
         props: {
+            loadingFriends: {type: Boolean, default: false},
+            showFriendList: {type: Boolean, default: false},
             selectedChatId: {type: String},
             showAddChat: {type: Boolean, default: true},
             showChatList: {type: Boolean, default: true},
             loadingChats: {type: Boolean, default: false},
         },
         methods: {
+            searchFriends() {
+                return null
+            },
             openChat(chat) {
                 this.$emit('selectDiffrentChat', chat.chatId)
             },
             searchChats() {
                 return null
             },
-            addChat() {
-              return null
+            addChatDialog() {
+                // list all friends
+                this.showFriendList = true;
+                return null
+            },
+            onCreateNewChat() {
+                const selectedFriends = this.selectedFriends;
+                this.$apollo
+                    .mutate({
+                        mutation: gql`mutation($users: [String!]!) {createChat(users: $users) { chatId }}`,
+                        variables: {
+                            users: selectedFriends,
+                        },
+                    })
+                    .then(() => {
+                        this.selectedFriends = [];
+                        this.showFriendList = false;
+                    })
+                    .catch((e) => {
+                        console.error(e);
+                    });
             }
         },
+        computed: {
+            inputDisabled() {
+                return !this.selectedFriends.length;
+            },
+        },
         apollo: {
+            getFriendList() {
+                return {
+                    query: gql`query { getFriendList }`,
+                    variables: {},
+                }
+            },
             chats() {
                 //const chat = this.$currentChats();
                 return {

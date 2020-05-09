@@ -26,7 +26,20 @@ type ClientServer struct {
 }
 
 func (c *ClientServer) GetFriendList(ctx context.Context) ([]*string, error) {
-	panic("implement me")
+	var friendsStringList []*string
+
+	// map each friend to name (in future {name, userID})
+	for _, friend := range c.client.FriendsList {
+		log.Debug("GetFriendList: having ", friend)
+		tmpStr := friend.Name
+		friendsStringList = append(friendsStringList, &tmpStr)
+	}
+
+	log.WithFields(log.Fields{
+		"friendsStringList": friendsStringList,
+	}).Debug("GetFriendList: responded to request")
+
+	return friendsStringList, nil
 }
 
 func (c *ClientServer) GetUserName(ctx context.Context) (string, error) {
