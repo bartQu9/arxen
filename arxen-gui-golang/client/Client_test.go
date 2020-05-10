@@ -63,7 +63,13 @@ func TestClient_receivedPayloadHandler(t *testing.T) {
 
 			time.Sleep(10 * time.Millisecond)
 
-			data01 := payload.New([]byte(`123`), []byte(`{"source":"`+tt.source+`", "type":"CHAT_PARTICIPANTS_REQUEST"}`))
+			nameString := "123"
+
+			for name, _ := range c.chatList {
+				nameString = name
+			}
+
+			data01 := payload.New([]byte(nameString), []byte(`{"source":"`+tt.source+`", "type":"CHAT_PARTICIPANTS_REQUEST"}`))
 
 			c.receivedPayloadChan <- data01
 

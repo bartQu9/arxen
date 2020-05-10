@@ -465,6 +465,10 @@ func (c *Client) receivedPayloadHandler() {
 			//}
 			//v2 possible problem is size limit of payload
 			log.Println("receivedPayloadHandler: got new CHAT_PARTICIPANTS_REQUEST")
+			if _, ok := c.chatList[payl.DataUTF8()]; !ok {
+				logger.Warn("receivedPayloadHandler: chatID not found in clients chatList")
+				break
+			}
 			addrString := strings.Join(c.chatList[payl.DataUTF8()].ClientsIPsList(), ",")
 			c.sendDataList[metadata["source"].(string)] <- payload.New([]byte(addrString), c.getMetadataTag(CHAT_PARTICIPANTS_RESPONSE, payl.DataUTF8()))
 			log.Println("receivedPayloadHandler: sending chat CHAT_PARTICIPANTS_RESPONSE")
