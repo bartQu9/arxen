@@ -1,0 +1,42 @@
+scalar Time
+
+type TextMessage {
+    chatId: String!
+    user: String!
+    timeStamp: Time!
+    text: String!
+}
+
+type Chat {
+    chatId: String!
+    clientsIPsList: [String!]!
+    latestMessage: TextMessage
+    chatAvatar: String
+    clientWriting: String
+}
+# last read
+
+type Mutation {
+    postMessage(chatID: String!, text: String!): TextMessage
+    createChat(users: [String!]!): Chat
+    clientWriting(chatID: String!, userId: String!): String
+    changeChatAvatar(chatID: String!, avatarAddr: String!): String
+    changeNick(userNick: String!): String
+    addFriend(userUUID: String!): String
+}
+
+type Query {
+    messages(chatID: String!): [TextMessage!]
+    chatUsers(chatID: String!): [String!]!
+    chats: [Chat]!
+    fetchMessages(chatID: String!, numOfMessages: Int!): [TextMessage!]
+    getFriendList: [String]
+    getUserName: String!
+}
+
+type Subscription {
+    messagePosted(chatID: String!): TextMessage!
+    userJoined(chatID: String!): String!
+    chatCreated: Chat!
+    clientWritingAlert(chatID: String!): String
+}

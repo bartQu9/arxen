@@ -34,8 +34,8 @@ func HttpServer() {
 	})
 	http.Handle("/chat", &templateHandler{filename: "chat.html"})
 
-	// start the web server
-	log.Println("Starting web server on", localServerAddress)
+	// start the web gql
+	log.Println("Starting web gql on", localServerAddress)
 	if err := http.ListenAndServe(localServerAddress, nil); err != nil {
 		log.Fatal("ListenAndServe:", err)
 	}

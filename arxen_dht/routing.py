@@ -1,9 +1,12 @@
 """
 Kademlia DHT implementation
 """
-
+import json
 from secrets import randbits
 from threading import Thread
+from queue import Queue
+from encodings.base64_codec import base64_encode
+import uuid
 
 
 class KadProperties:
@@ -93,10 +96,95 @@ class _KadRoutingTable:
         return collected_nodes[:next_hops_count]
 
 
+class KadRPC:
+    def __init__(self, node: Node, rpc_type: str, append_part: dict = None):
+        # TODO add a DEFAULT_NODE which is set for this local node to prevent passing Node arg in subsequent RPCs calls
+        """
+        :param rpc_type: REQUEST or RESPONSE
+        :param node: Node which interface will send this RPC (req or resp)
+        """
+        self.node = node
+        self.rpc_type = rpc_type
+        self.append_part = append_part
+        self.rpc_uuid = uuid.uuid1()
+
+        self.dict_repr = self.to_dict_representation()
+
+    def to_dict_representation(self):
+        sending_node = {"id": self.node.node_id,
+                        "ip": self.node.ip_info[0],
+                        "port": self.node.ip_info[1]}
+        rpc = {"node": sending_node}
+        rpc.update({"type": self.rpc_type})
+
+        # append RPC parts from children class
+        if self.append_part:
+            rpc.update(self.append_part)
+
+        rpc_uuid_b64 = base64_encode(self.rpc_uuid.bytes)[0].decode()
+        rpc.update({"rpc_uuid": rpc_uuid_b64})
+
+        return rpc
+
+    def get_json(self):
+        return json.dumps(self.to_dict_representation())
+
+    def __repr__(self):
+        return "{}: {}".format(self.__class__.__name__, self.dict_repr)
+
+
+class RequestRPC(KadRPC):
+
+    def __init__(self, rpc_command: str, command_arg: dict, *args, **kwargs):
+        self.rpc_command = rpc_command
+        self.command_arg = command_arg
+        super().__init__(rpc_type="REQUEST", append_part={"command": rpc_command, "arg": command_arg}, *args, **kwargs)
+
+
+class FindNodeRPC(RequestRPC):
+    def __init__(self, lookup_node_id: int, *args, **kwargs):
+        """
+        lookup_node_id: node we're looking for
+        """
+        super().__init__(rpc_command="FIND_NODE", command_arg={"node_id": str(lookup_node_id)}, *args, **kwargs)
+
+
+class FindValueRPC(RequestRPC):
+    def __init__(self, value_id: int, *args, **kwargs):
+        """
+        value_id: value ID of data we're trying to GET
+        """
+        super().__init__(rpc_command="FIND_VALUE", command_arg={"value_id": str(value_id)}, *args, **kwargs)
+
+
+class PingRPC(RequestRPC):
+    def __init__(self, node_id: int, *args, **kwargs):
+        super().__init__(rpc_command="PING", command_arg={"node_id": str(node_id)}, *args, **kwargs)
+
+
+class StoreRPC(RequestRPC):
+    def __init__(self, value_id: int, data: bytes, *args, **kwargs):
+        super().__init__(rpc_command="STORE", command_arg={"value_id": str(value_id),
+                                                           "data": str(base64_encode(data))}, *args, **kwargs)
+
+
+class ResponseRPC(KadRPC):
+
+    def __init__(self, request_rpc_uuid: uuid.UUID, response_data, *args, **kwargs):
+        """
+        :param response_type: int, str, dict - how recipient should parse data
+        """
+        self.request_rpc_uuid = request_rpc_uuid
+        self.response_data = response_data
+
+        append_part = {"request_rpc_uuid": request_rpc_uuid, "response_data": response_data}
+        super().__init__(rpc_type="RESPONSE", append_part=append_part, *args, **kwargs)
+
+
 class KadTask(Thread):
     """
     Represents generic task which is performed e.g. FINDing_NODEs requires underlying nodes interactions, so this class
-    will keep needed queues and other subtasks
+    will keep needed queues and other subtasks, BASE CLASS FOR CONCURRENCY
     """
 
     _KadTaskList = []
@@ -111,9 +199,23 @@ class KadTask(Thread):
         self.children_tasks = []
         self.parentTask = parent
 
+        self.ingress_queue = Queue()
+        self.egress_queue = Queue()
+
     @staticmethod
     def get_existing_kad_tasks() -> list:
         return KadTask._KadTaskList
+
+
+class FindNodeTask(KadTask):
+    def __init__(self, node_id: int, *args, **kwargs):
+        """
+        :param node_id: node we are trying to find
+        """
+        super().__init__(facility="FindNodeTask")
+
+    def run(self):
+        pass
 
 
 class KadEngine:

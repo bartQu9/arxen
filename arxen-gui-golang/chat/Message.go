@@ -2,6 +2,7 @@ package chat
 
 import (
 	"github.com/rsocket/rsocket-go/payload"
+	"main/gql"
 	"time"
 )
 
@@ -16,6 +17,16 @@ type TextMessage struct {
 	Data      string
 	Author    string
 	Timestamp time.Time
+}
+
+// TODO implement me
+func (t *TextMessage) TextMessageToGraphqlTMessage() gql.TextMessage {
+	return gql.TextMessage{
+		ChatID:    "",
+		User:      "",
+		TimeStamp: time.Time{},
+		Text:      "",
+	}
 }
 
 // TODO implement me

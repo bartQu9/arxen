@@ -24,6 +24,7 @@ EXPOSE 80
 EXPOSE 8000
 EXPOSE 7878
 EXPOSE 7879
+EXPOSE 8085
 
 # Command to run the executable
 CMD ["./main.out"]

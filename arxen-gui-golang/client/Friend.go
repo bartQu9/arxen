@@ -2,8 +2,8 @@ package client
 
 // struct for friends store
 type Friend struct {
-	name      string
-	friendIP  string
-	friendID  string
-	publicKey string // to be changed
+	Name      string `json:"name"`
+	FriendIP  string `json:"friendIP"`
+	FriendID  string `json:"friendID"`
+	PublicKey string `json:"publicKey"` // to be changed
 }

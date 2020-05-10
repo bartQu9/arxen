@@ -59,29 +59,52 @@ func TestClient_receivedPayloadHandler(t *testing.T) {
 				c.sendDataList[addr] = ch
 			}
 
-			go c.createChat(tt.initList)
+			go c.CreateChat(tt.initList)
 
 			time.Sleep(10 * time.Millisecond)
 
-			data01 := payload.New([]byte(`123`), []byte(`{"source":"`+tt.source+`", "type":"CHAT_PARTICIPANTS_REQUEST"}`))
+			nameString := "123"
+
+			for name, _ := range c.chatList {
+				nameString = name
+			}
+
+			data01 := payload.New([]byte(nameString), []byte(`{"source":"`+tt.source+`", "type":"CHAT_PARTICIPANTS_REQUEST"}`))
 
 			c.receivedPayloadChan <- data01
 
 			var rcvData02 []payload.Payload
 
+			quit := make(chan struct{})
+			go func() {
+				for {
+					select {
+					case <-quit:
+						return
+					default:
+						for _, addr := range tt.initList {
+							if addr != tt.source {
+								<-c.sendDataList[addr]
+							}
+						}
+					}
+				}
+			}()
+
 			for data := range c.sendDataList[tt.source] {
 				rcvData02 = append(rcvData02, data)
-				if len(rcvData02) == 3 {
+				if len(rcvData02) == 2 {
 					break
 				}
 			}
 
-			resp := payload.New([]byte(`2`), []byte(`{"source":"`+c.userIP+`", "type":"CHAT_PARTICIPANTS_RESPONSE"}`))
+			resp := payload.New([]byte(`1,2,3,4,tcp://10.5.0.3:7878`), []byte(`{"source":"`+c.userIP+`", "type":"CHAT_PARTICIPANTS_RESPONSE"}`))
 
-			if rcvData02[2].DataUTF8() != resp.DataUTF8() {
-				t.Errorf("Test failed: \"%v\" is not equal to \"%v\"", rcvData02[1], payload.New([]byte("2"),
-					[]byte(`{"source":"`+c.userIP+`", "type":"CHAT_PARTICIPANTS_RESPONSE"}`)))
+			if rcvData02[1].DataUTF8() != resp.DataUTF8() {
+				t.Errorf("Test failed: \"%v\" is not equal to \"%v\"", rcvData02[1], resp)
 			}
+
+			close(quit)
 		})
 	}
 }
@@ -105,7 +128,7 @@ func TestClient_CHAT_ADVERT(t *testing.T) {
 		chatID          string
 	}{
 		{
-			"test_CHAT_PARTICIPANTS_REQUEST",
+			"test_CHAT_ADVERT",
 			[]string{"tcp://10.5.0.2:7878", "tcp://10.5.0.3:7878", "tcp://10.5.0.4:7878"},
 			fields{
 				userIP:              "tcp://10.5.0.1:7878",
@@ -141,12 +164,16 @@ func TestClient_CHAT_ADVERT(t *testing.T) {
 
 			time.Sleep(50 * time.Millisecond)
 
+			var mu sync.Mutex
+
 			for _, listener := range tt.otherClientsIPs {
 				wg.Add(1)
 				go func(_wg *sync.WaitGroup, lis string) {
 					defer _wg.Done()
 					for payl := range c.sendDataList[lis] {
+						mu.Lock()
 						tt.output[lis] = append(tt.output[lis], payl)
+						mu.Unlock()
 						if len(tt.output[lis]) > 0 {
 							break
 						}
@@ -156,13 +183,19 @@ func TestClient_CHAT_ADVERT(t *testing.T) {
 
 			time.Sleep(50 * time.Millisecond)
 
-			c.createChat(tt.otherClientsIPs)
+			c.CreateChat(tt.otherClientsIPs)
+
+			nameString := "123"
+
+			for name, _ := range c.chatList {
+				nameString = name
+			}
 
 			wg.Wait()
 
 			for _, item := range tt.output {
-				if item[0].DataUTF8() != tt.chatID {
-					t.Errorf("Test FAILED: output \"%s\" != \"%s\"!", item[0].DataUTF8(), tt.chatID)
+				if item[0].DataUTF8() != nameString {
+					t.Errorf("Test FAILED: output \"%s\" != \"%s\"!", item[0].DataUTF8(), nameString)
 				}
 			}
 		})
