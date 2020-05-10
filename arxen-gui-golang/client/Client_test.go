@@ -164,12 +164,6 @@ func TestClient_CHAT_ADVERT(t *testing.T) {
 
 			time.Sleep(50 * time.Millisecond)
 
-			nameString := "123"
-
-			for name, _ := range c.chatList {
-				nameString = name
-			}
-
 			var mu sync.Mutex
 
 			for _, listener := range tt.otherClientsIPs {
@@ -190,6 +184,12 @@ func TestClient_CHAT_ADVERT(t *testing.T) {
 			time.Sleep(50 * time.Millisecond)
 
 			c.CreateChat(tt.otherClientsIPs)
+
+			nameString := "123"
+
+			for name, _ := range c.chatList {
+				nameString = name
+			}
 
 			wg.Wait()
 
