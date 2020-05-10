@@ -164,6 +164,10 @@ func TestClient_CHAT_ADVERT(t *testing.T) {
 
 			time.Sleep(50 * time.Millisecond)
 
+			for name, _ := range c.chatList {
+				tt.chatID = name
+			}
+
 			var mu sync.Mutex
 
 			for _, listener := range tt.otherClientsIPs {
