@@ -194,7 +194,7 @@ func TestClient_CHAT_ADVERT(t *testing.T) {
 			wg.Wait()
 
 			for _, item := range tt.output {
-				if item[0].DataUTF8() != tt.chatID {
+				if item[0].DataUTF8() != nameString {
 					t.Errorf("Test FAILED: output \"%s\" != \"%s\"!", item[0].DataUTF8(), nameString)
 				}
 			}
