@@ -1,5 +1,3 @@
-import gql from "graphql-tag";
-import gql from "graphql-tag";
 <template>
     <div class="card-window" :style="[{ height }, cssVars]">
         <div class="chat-container">
@@ -83,9 +81,10 @@ import gql from "graphql-tag";
 
 <style lang="scss">
     @import '../styles/index.scss';
+    @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@500&display=swap');
 
     * {
-        font-family: inherit;
+        font-family: 'Quicksand', sans-serif;
     }
 
     .card-window {

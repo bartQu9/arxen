@@ -697,7 +697,7 @@ func (c *Client) TestSetup() {
 	go c.receivedPayloadHandler()
 	go c.eventListener()
 
-	participants := []string{"tcp://127.0.0.3:7878"}
+	var participants []string
 
 	c.FriendsList["tcp://127.0.0.3:7878"] = Friend{
 		Name:     "tcp://127.0.0.3:7878",
@@ -708,22 +708,26 @@ func (c *Client) TestSetup() {
 
 	if value, ok := os.LookupEnv("SAMPLE_CHAT_SETUP_ADDR"); ok {
 		participants = strings.Split(value, ",")
-		logger.Info("TestSetup: chat setup connect to = ", participants[0])
+		logger.Info("TestSetup: chat setup connect to = ", participants)
 
-		c.FriendsList[participants[0]] = Friend{
-			Name:     participants[0],
-			FriendIP: participants[0],
+		for _, part := range participants {
+			c.FriendsList[part] = Friend{
+				Name:     part,
+				FriendIP: part,
+			}
 		}
 	}
 
 	logger.Debug("TestSetup: and now, friendslist = ", c.FriendsList)
 
-	if value, ok := os.LookupEnv("MAIN_MACHINE"); ok && value == "1" {
+	if value, ok := os.LookupEnv("MAIN_MACHINE"); ok && value == "0" {
 		time.Sleep(5 * time.Second)
 		log.Println("Main Machine")
 		c.CreateChat(participants)
-	} else {
+	} else if value, ok := os.LookupEnv("MAIN_MACHINE"); ok && value == "1"  {
 		log.Println("Second Machine")
+	} else if value, ok := os.LookupEnv("MAIN_MACHINE"); ok && value == "2" {
+		log.Println("Third Machine")
 	}
 
 	//time.Sleep(10 * time.Minute)

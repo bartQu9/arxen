@@ -61,6 +61,11 @@ func (c *ClientServer) ClientWritingAlert(ctx context.Context, chatID string) (<
 func (c *ClientServer) FetchMessages(ctx context.Context, chatID string, numOfMessages int) ([]*gql.TextMessage, error) {
 	// find chat and forward message
 	c.mutex.Lock()
+	numOfExistingMessages := len(c.client.GetChatList()[chatID].TextMessageList)
+	// make sure not exiting number of map array elements
+	if numOfMessages > numOfExistingMessages {
+		numOfMessages = numOfExistingMessages
+	}
 	textList := c.client.GetChatList()[chatID].TextMessageList[0:numOfMessages]
 	c.mutex.Unlock()
 

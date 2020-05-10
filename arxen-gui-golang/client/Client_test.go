@@ -164,8 +164,10 @@ func TestClient_CHAT_ADVERT(t *testing.T) {
 
 			time.Sleep(50 * time.Millisecond)
 
+			nameString := "123"
+
 			for name, _ := range c.chatList {
-				tt.chatID = name
+				nameString = name
 			}
 
 			var mu sync.Mutex
@@ -193,7 +195,7 @@ func TestClient_CHAT_ADVERT(t *testing.T) {
 
 			for _, item := range tt.output {
 				if item[0].DataUTF8() != tt.chatID {
-					t.Errorf("Test FAILED: output \"%s\" != \"%s\"!", item[0].DataUTF8(), tt.chatID)
+					t.Errorf("Test FAILED: output \"%s\" != \"%s\"!", item[0].DataUTF8(), nameString)
 				}
 			}
 		})
