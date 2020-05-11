@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/segmentio/ksuid"
 )
 
 const GRAPHQL_ROUTE = "/graphql"
@@ -25,15 +27,53 @@ type ClientServer struct {
 	mutex  sync.Mutex
 }
 
+func (c *ClientServer) NewChatLastMessage(ctx context.Context, chatID string) (<-chan *string, error) {
+	panic("implement me")
+}
+
+func (c *ClientServer) NewFriend(ctx context.Context) (<-chan *gql.Friend, error) {
+	panic("implement me")
+}
+
+func (c *ClientServer) GetFriendsTypeList(ctx context.Context) ([]*gql.Friend, error) {
+	var tmpFriendsList []*gql.Friend
+
+	// find chat and forward message
+	c.mutex.Lock()
+	for _, friend := range c.client.FriendsList {
+		tmpFriendsList = append(tmpFriendsList, friend)
+	}
+	c.mutex.Unlock()
+
+	//log.Println("FetchMessages: chatID ", chatID, " resp: ", textList)
+
+	log.WithFields(log.Fields{
+		"textList": tmpFriendsList,
+	}).Debug("GetFriendsTypeList:")
+
+	if tmpFriendsList != nil {
+		return tmpFriendsList, nil
+	}
+
+	//return nil, errors.New("text messages list could be not returned")
+	return []*gql.Friend{}, nil
+}
+
+func (c *ClientServer) ChangeChatName(ctx context.Context, chatID string, chatName string) (*string, error) {
+	panic("implement me")
+}
+
 func (c *ClientServer) GetFriendList(ctx context.Context) ([]*string, error) {
 	var friendsStringList []*string
 
 	// map each friend to name (in future {name, userID})
+	c.mutex.Lock()
 	for _, friend := range c.client.FriendsList {
 		log.Debug("GetFriendList: having ", friend)
-		tmpStr := friend.Name
-		friendsStringList = append(friendsStringList, &tmpStr)
+		tmpStr := friend.Nick
+		friendsStringList = append(friendsStringList, tmpStr)
 	}
+	c.mutex.Unlock()
 
 	log.WithFields(log.Fields{
 		"friendsStringList": friendsStringList,
@@ -135,6 +175,7 @@ func (c *ClientServer) Serve(port int) error {
 func (c *ClientServer) PostMessage(ctx context.Context, chatID string, text string) (*gql.TextMessage, error) {
 
 	m := gql.TextMessage{
+		MessageID: ksuid.New().String(),
 		ChatID:    chatID,
 		User:      c.client.GetUserID(),
 		TimeStamp: time.Now().UTC(),
@@ -224,9 +265,16 @@ func (c *ClientServer) Chats(ctx context.Context) ([]*gql.Chat, error) {
 	c.mutex.Unlock()
 
 	for _, ch := range chats {
+		var lastMessage *gql.TextMessage
+		if len(ch.TextMessageList) != 0 {
+			lastMessage = ch.TextMessageList[len(ch.TextMessageList)-1]
+		}
 		gqlChats = append(gqlChats, &gql.Chat{
 			ChatID:         ch.ChatID,
 			ClientsIPsList: ch.ClientsIPsList(),
+			LatestMessage: 	lastMessage,
+			ClientWriting:  nil,
+			ChatName:       &ch.ChatName,
 		})
 	}
 

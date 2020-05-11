@@ -1,19 +1,52 @@
 <template>
     <div class="col-messages" v-show="selectedChatId">
         <div class="room-header app-border-b">
-            <div
-                    v-if="chatAvatar"
-                    class="room-avatar"
-                    :style="{ 'background-image': `url('${chatAvatar}')` }"
-            ></div>
-            <div
-                    v-if="!chatAvatar"
-                    class="room-avatar"
-                    :style="{ 'background-image': `url('${missingAvatarUrl}')` }"
-            ></div>
             <div class="room-wrapper">
+                <div
+                        v-if="false"
+                        class="svg-button toggle-button"
+                        :class="{ 'rotate-icon': !selectedChatId }"
+                >
+                    <svg-icon name="toggle" />
+                </div>
+                <div
+                        v-if="chatAvatar"
+                        class="room-avatar"
+                        :style="{ 'background-image': `url('${chatAvatar}')` }"
+                ></div>
+                <div
+                        v-if="!chatAvatar"
+                        class="room-avatar"
+                        :style="{ 'background-image': `url('${missingAvatarUrl}')` }"
+                ></div>
+
                 <div class="room-name" v-html="selectedChatId"></div>
             </div>
+
+            <div
+                    class="svg-button room-options"
+                    v-if="menuActions.length"
+                    @click="menuOpened = !menuOpened"
+            >
+                <svg-icon name="menu"/>
+            </div>
+            <transition name="slide-left" v-if="menuActions.length">
+                <div
+                        v-if="menuOpened"
+                        v-click-outside="closeMenu"
+                        class="menu-options"
+                >
+                    <div class="menu-list">
+                        <div v-for="action in menuActions" :key="action.name">
+                            <div
+                                    class="menu-item"
+                                    v-html="action.title"
+                                    @click="menuActionHandler(action)"
+                            ></div>
+                        </div>
+                    </div>
+                </div>
+            </transition>
         </div>
 
         <div ref="scrollContainer" class="container-scroll">
@@ -51,7 +84,7 @@
 
                     <div v-if="selectedChatId && selectedChatId.length && messages">
                         <app-message v-for="message of messages"
-                                     :key="message.timeStamp"
+                                     :key="message.messageId"
                                      :message="message"
                                      :userName="userName"
                         >
@@ -73,9 +106,9 @@
         <div ref="roomFooter" class="room-footer">
             <div class="box-footer">
             <textarea ref="roomTextarea"
-                    :placeholder="textMessages.TYPE_MESSAGE"
-                    v-model="messageInput"
-                    @input="onChangeInput"
+                      :placeholder="textMessages.TYPE_MESSAGE"
+                      v-model="messageInput"
+                      @input="onChangeInput"
             ></textarea>
 
                 <div class="icon-textarea">
@@ -100,8 +133,9 @@
     import Loader from "@/components/Loader";
     import InfiniteLoading from 'vue-infinite-loading'
     import SvgIcon from "@/components/SvgIcon";
+    import vClickOutside from 'v-click-outside'
     import {missingAvatarUrl} from '@/themes';
-    import { parseJSON, formatRelative } from 'date-fns'
+    import {parseJSON, formatRelative} from 'date-fns'
 
     export default {
         name: "MessageList",
@@ -111,14 +145,20 @@
             'infinite-loading': InfiniteLoading,
             'svg-icon': SvgIcon,
         },
+        directives: {
+            clickOutside: vClickOutside.directive
+        },
         props: {
             selectedChatId: {type: String},
             messagesLoaded: {type: Boolean, default: true},
             textMessages: {type: Object, default: null},
-            userName: {type: String}
+            userName: {type: String},
+            latestSeenMessageID: {type: String},
         },
         data() {
             return {
+                currentlySelectedChat: null,
+                chats: [],
                 loadingMessages: false,
                 loadingMoreMessages: false,
                 infiniteState: null,
@@ -127,6 +167,8 @@
                 messageInput: '',
                 missingAvatarUrl,
                 chatAvatar: '',
+                menuOpened: false,
+                menuActions: [{title: "Add", name: "add"}, {title: "Show Users", name: "show_user"}],
             };
         },
         apollo: {
@@ -139,6 +181,7 @@
                                 user
                                 text
                                 timeStamp
+                                messageId
                             }
                     }
                     `,
@@ -183,6 +226,21 @@
                 if (val) this.loadingMessages = false;
                 if (this.infiniteState) this.infiniteState.complete()
             },
+        },
+        created() {
+            // tmp solution
+            this.$apollo
+                .query({
+                    query: gql`{ chats { chatId clientsIPsList chatName } }`,
+                })
+                .then((data) => {
+                    console.log(data);
+                    this.chats = data.data.chats;
+                    this.currentlySelectedChat = this.chats.find(chat => chat.chatId === this.selectedChatId);
+                })
+                .catch((e) => {
+                    console.error(e);
+                });
         },
         methods: {
             loadMoreMessages($state) {
@@ -235,10 +293,17 @@
             },
             humanDate(s) {
                 // in GoLang time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", metadata["timeStamp"].(string))
-                console.log(s);
-                let res = parseJSON( s, '2006-01-02 15:04:05.999999999 -0700 MST', new Date());
-                console.log(res);
+                //console.log(s);
+                let res = parseJSON(s, '2006-01-02 15:04:05.999999999 -0700 MST', new Date());
+                //console.log(res);
                 return formatRelative(res, new Date());
+            },
+            closeMenu() {
+                this.menuOpened = false
+            },
+            menuActionHandler(action) {
+                this.closeMenu();
+                this.$emit('menuActionHandler', action)
             },
         },
         computed: {

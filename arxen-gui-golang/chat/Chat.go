@@ -7,6 +7,9 @@ import (
 
 type Chat struct {
 
+	// Chat Name set by user
+	ChatName string
+
 	// UUID for chat
 	ChatID string
 
@@ -35,7 +38,9 @@ type Chat struct {
 // args - ChatID: ID of chat (numeric string); clientsIPsList: list of other participants addresses (list of strings)
 //
 func NewChat(chatID string, clientsIPsList []string) *Chat {
-	return &Chat{ChatID: chatID, TextMessageList: []*gql.TextMessage{}, clientsIPsList: clientsIPsList, MessagesChan: make(chan *gql.TextMessage, 100), SendMessageChan: make(chan gql.TextMessage)}
+	return &Chat{ChatID: chatID, TextMessageList: []*gql.TextMessage{},
+		clientsIPsList: clientsIPsList, MessagesChan: make(chan *gql.TextMessage, 100),
+		SendMessageChan: make(chan gql.TextMessage)}
 }
 
 func (c Chat) ClientsIPsList() []string {

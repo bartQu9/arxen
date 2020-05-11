@@ -49,7 +49,7 @@ type Client struct {
 	sendDataList        map[string]chan payload.Payload // payload and target chat format: map[clientIP] payload(message, chatID)
 	receivedPayloadChan chan payload.Payload            // channel with all incoming payloads
 
-	FriendsList map[string]Friend // map[friendsNick]Friend
+	FriendsList map[string]*gql.Friend // map[friendsNick]Friend
 	secretKey   string            // used for authentication
 
 	mutex 		sync.Mutex			// to prevent access to same data by two goroutines
@@ -84,7 +84,7 @@ func NewClient() *Client {
 	_chatList := make(map[string]*chat.Chat)
 	_sendMessageList := make(map[string]chan payload.Payload)
 	_receivedPayloadChan := make(chan payload.Payload)
-	_FriendsList := make(map[string]Friend)
+	_FriendsList := make(map[string]*gql.Friend)
 
 	return &Client{
 		userIP:              userAddr,
@@ -486,7 +486,7 @@ func (c *Client) receivedPayloadHandler() {
 						c.sendDataList[addr] = ch
 					}
 					// send to each chan CHAT_ADVERT
-					c.sendDataList[addr] <- payload.New(payl.Data(), c.getMetadataTag(CHAT_ADVERT))
+					c.sendDataList[addr] <- payload.New(payl.Data(), c.getMetadataTag(CHAT_ADVERT, payl.DataUTF8()))
 				}
 			}
 		case CHAT_ADVERT:
@@ -512,7 +512,7 @@ func (c *Client) chatMessagesHandler(chat *chat.Chat) {
 	for newMessageToBeSend := range chat.SendMessageChan {
 
 		// transform message
-		payloadMessage := payload.New([]byte(newMessageToBeSend.Text), c.getMetadataTag(CHAT_MESSAGE, chat.ChatID, newMessageToBeSend.User, newMessageToBeSend.TimeStamp.String()))
+		payloadMessage := payload.New([]byte(newMessageToBeSend.Text), c.getMetadataTag(CHAT_MESSAGE, chat.ChatID, newMessageToBeSend.User, newMessageToBeSend.TimeStamp.String(), newMessageToBeSend.MessageID))
 
 		// forward to oneself
 		c.receivedPayloadChan <- payloadMessage
@@ -543,15 +543,19 @@ func (c *Client) getMetadataTag(args ...string) []byte {
 		}
 		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `","chatID":"` + args[1] + `"}`)
 	case CHAT_MESSAGE:
-		// args[1]: chatID, args[2]: user, args[3]: timeStamp
-		if len(args) < 4 {
+		// args[1]: chatID, args[2]: user, args[3]: timeStamp, args[4]: MessageID
+		if len(args) < 5 {
 			panic("getMetadataTag: Too few arguments")
 		}
-		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `","chatId":"` + args[1] + `", "user":"` + args[2] + `", "timeStamp":"` + args[3] + `"}`)
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `","chatId":"` + args[1] + `", "user":"` + args[2] + `", "timeStamp":"` + args[3] + `", "MessageID": "`+ args[4] +`"}`)
 	case CHAT_ADVERT_REQUEST:
 		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `"}`)
 	case CHAT_ADVERT:
-		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `"}`)
+		// args[1]: chatName
+		if len(args) < 2 {
+			panic("getMetadataTag: Too few arguments")
+		}
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `", "chatName": "` + args[1] + `"}`)
 	default:
 		log.Fatalln("getMetadataTag: Bad message type")
 		return nil
@@ -590,6 +594,7 @@ func PayloadToGraphqlTextMessage(p payload.Payload) gql.TextMessage {
 	}
 
 	return gql.TextMessage{
+		MessageID: metadata["MessageID"].(string),
 		ChatID:    chatID,
 		User:      metadata["user"].(string),
 		TimeStamp: date,
@@ -699,9 +704,12 @@ func (c *Client) TestSetup() {
 
 	var participants []string
 
-	c.FriendsList["tcp://127.0.0.3:7878"] = Friend{
-		Name:     "tcp://127.0.0.3:7878",
-		FriendIP: "tcp://127.0.0.3:7878",
+	tmpFriend := "tcp://127.0.0.3:7878"
+
+	c.FriendsList[tmpFriend] = &gql.Friend{
+		Nick:   &tmpFriend,
+		UserID: tmpFriend,
+		UserIP: &tmpFriend,
 	}
 
 	logger.Debug("TestSetup: friendslist = ", c.FriendsList)
@@ -711,9 +719,11 @@ func (c *Client) TestSetup() {
 		logger.Info("TestSetup: chat setup connect to = ", participants)
 
 		for _, part := range participants {
-			c.FriendsList[part] = Friend{
-				Name:     part,
-				FriendIP: part,
+			tmpNick := part
+			c.FriendsList[part] = &gql.Friend{
+				Nick:       &tmpNick,
+				UserID:     part,
+				UserIP: 	&tmpNick,
 			}
 		}
 	}

@@ -67,9 +67,9 @@
             },
             humanDate(s) {
                 // in GoLang time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", metadata["timeStamp"].(string))
-                console.log(s);
+                //console.log(s);
                 let res = parseJSON( s, '2006-01-02 15:04:05.999999999 -0700 MST', new Date());
-                console.log(res);
+                //console.log(res);
                 return formatDistance(res, new Date()) + ' ago';
             },
         },

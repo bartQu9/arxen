@@ -1,52 +1,35 @@
 <template>
     <div class="room-item">
         <div
-                v-if="chat.avatar"
+                v-if="avatar"
                 class="room-avatar"
-                :style="{ 'background-image': `url('${chat.avatar}')` }"
+                :style="{ 'background-image': `url('${avatar}')` }"
         ></div>
         <div
-                v-if="!chat.avatar"
+                v-if="!avatar"
                 class="room-avatar"
                 :style="{ 'background-image': `url('${missingAvatarUrl}')` }"
         ></div>
         <div class="name-container text-ellipsis">
             <div class="title-container">
-                <div class="room-name text-ellipsis" v-if="chat.chatName.length" v-html="chat.chatName"></div>
-                <div class="room-name text-ellipsis" v-if="!chat.chatName.length" v-html="chat.chatId"></div>
-                <div
-                        class="text-last"
-                        v-if="chat.latestMessage"
-                        v-html="chat.latestMessage.timeStamp"
-                ></div>
-            </div>
-            <div
-                    class="text-last text-ellipsis"
-                    :class="{ 'message-new': chat.latestMessage }"
-                    v-if="chat.latestMessage"
-            >
-                <span v-if="chat.latestMessage">
-							<svg-icon name="checkmark" class="icon-check" />
-						</span>
-                <span v-html="chat.latestMessage.text"></span>
+                <div class="room-name text-ellipsis" v-html="friend"></div>
             </div>
         </div>
     </div>
 </template>
 
 <script>
-    import {missingAvatarUrl} from '@/themes';
-    import SvgIcon from "@/components/SvgIcon";
+    import {missingAvatarUrl} from "@/themes";
 
     export default {
-        name: "ChatMiniature",
-        components: {
-            'svg-icon': SvgIcon,
-        },
+        name: "FriendListMiniature",
         props: {
-            chat: {
-                type: Object,
+            avatar: {
+                type: String,
             },
+            friend: {type: String, required: true},
+            value: {type: String},
+            selected: {type: Boolean, default: false},
         },
         data() {
             return {
@@ -54,8 +37,6 @@
             }
         },
     }
-
-    // <strong>{{chat.chatId}}</strong>
 </script>
 
 <style lang="scss" scoped>
@@ -200,3 +181,4 @@
         background-color: var(--chat-room-color-online);
     }
 </style>
+
