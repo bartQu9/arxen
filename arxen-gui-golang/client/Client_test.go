@@ -65,7 +65,7 @@ func TestClient_receivedPayloadHandler(t *testing.T) {
 
 			nameString := "123"
 
-			for name, _ := range c.chatList {
+			for name := range c.chatList {
 				nameString = name
 			}
 
@@ -187,7 +187,7 @@ func TestClient_CHAT_ADVERT(t *testing.T) {
 
 			nameString := "123"
 
-			for name, _ := range c.chatList {
+			for name := range c.chatList {
 				nameString = name
 			}
 

@@ -38,8 +38,10 @@ import (
 // - connect with other clients daemons
 // - control every chat user is participating in
 
+// rate of refreshing connections with other clients
 const CONNECTIONS_UPDATE_REFRESH_RATE = 10 * time.Second
 
+// Client: basic struct handling connections between other clients
 type Client struct {
 	userIP     string
 	clientsIPs map[string]bool // clientIP : status
@@ -55,11 +57,12 @@ type Client struct {
 	mutex 		sync.Mutex			// to prevent access to same data by two goroutines
 }
 
+// GetChatList returns chat list map
 func (c *Client) GetChatList() map[string]*chat.Chat {
 	return c.chatList
 }
 
-// return new Client
+// NewClient returns new Client
 func NewClient() *Client {
 	// default port
 	userAddr := "tcp://127.0.0.2:7878"
@@ -97,7 +100,7 @@ func NewClient() *Client {
 	}
 }
 
-// method listening and handling new connections to client
+// eventListener is method listening and handling new connections to client
 func (c *Client) eventListener() {
 	// await for new connections
 	err := rsocket.Receive().
@@ -116,8 +119,8 @@ func (c *Client) eventListener() {
 	panic(err)
 }
 
+// CreateChat method is used to create new chat
 // TODO implement till the end
-// method used to create new chat
 func (c *Client) CreateChat(initList []string) *chat.Chat {
 
 	chatIDstr := uuid.New().String()
@@ -177,6 +180,7 @@ func (c *Client) CreateChat(initList []string) *chat.Chat {
 	*/
 }
 
+// createSlaveChat is version of CreateChat used when chatID is already known
 func (c *Client) createSlaveChat(initList []string, chatIDstr string) {
 	// init new chat with complete users list
 	// add userIP ex"tcp://10.5.0.2:7878" to that list
@@ -206,7 +210,7 @@ func (c *Client) createSlaveChat(initList []string, chatIDstr string) {
 
 }
 
-// handler of all connections across itself and other clients
+// connectionsHandler is a handler of all connections across itself and other clients
 func (c *Client) connectionsHandler() {
 	for {
 		// refresh at rate
@@ -234,6 +238,7 @@ func (c *Client) connectionsHandler() {
 	}
 }
 
+// connectToClient periodically check if client is connected to desired clients
 // Possible type problem: struct vs payload
 func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 	// goroutine for connecting to clients
@@ -305,17 +310,20 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 		BlockLast(context.Background())
 }
 
+// clientManager is not in use at this moment
 // runs eventListener() and manages connections
 func (c *Client) clientManager() {
 
 }
 
+// GetUserID returns userIP/ID
+// TODO solve userID/IP
 func (c *Client) GetUserID() string {
 	// TODO change in the future
 	return c.userIP
 }
 
-// used to obtain machine IP address
+// GetOutboundIP can be used to obtain machine IP address
 func GetOutboundIP() (net.IP, bool) {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
@@ -328,6 +336,7 @@ func GetOutboundIP() (net.IP, bool) {
 	return localAddr.IP, true
 }
 
+// responder is factory for rsocket.RSocket instance
 func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 	// custom responder
 	return rsocket.NewAbstractSocket(
@@ -416,7 +425,7 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 // CHAT_MESSAGE:			  {message,{source, type, chatID}}
 // CHAT_PARTICIPANTS_REQUEST: {chatID, {source, type}}
 
-// helper, handling all incoming messages from each connection
+// receivedPayloadHandler is helper, handling all incoming messages from each connection
 func (c *Client) receivedPayloadHandler() {
 	// this "for" is basically onNext()
 	for payl := range c.receivedPayloadChan {
@@ -507,7 +516,7 @@ func (c *Client) receivedPayloadHandler() {
 	}
 }
 
-// handles forwarding messages from particular chat
+// chatMessagesHandler handles forwarding messages from particular chat
 func (c *Client) chatMessagesHandler(chat *chat.Chat) {
 	for newMessageToBeSend := range chat.SendMessageChan {
 
@@ -528,7 +537,7 @@ func (c *Client) chatMessagesHandler(chat *chat.Chat) {
 	}
 }
 
-// function returning metadata for payload
+// getMetadataTag: function returning metadata for payload
 // args:
 // args[0]: type of request/response to be generated
 // args[1:]: extra arguments:
@@ -562,7 +571,7 @@ func (c *Client) getMetadataTag(args ...string) []byte {
 	}
 }
 
-// Convert incoming payload to TextMessage (defined in gql module)
+// PayloadToGraphqlTextMessage converts incoming payload to TextMessage (defined in gql module)
 // CHAT_MESSAGE:			  {text,{source, type, chatID/chatId, user, timeStamp}}
 // where text is part of TextMessage
 func PayloadToGraphqlTextMessage(p payload.Payload) gql.TextMessage {
@@ -602,7 +611,7 @@ func PayloadToGraphqlTextMessage(p payload.Payload) gql.TextMessage {
 	}
 }
 
-// converts text message format to bytes
+// GraphqlTextMessageToByte converts text message format to bytes
 // probably redundant in the future
 func GraphqlTextMessageToByte(message gql.TextMessage) []byte {
 	jsonMessage, err := json.Marshal(message)
@@ -694,8 +703,8 @@ func GraphqlTextMessageToByte(message gql.TextMessage) []byte {
 //	}
 //}
 
+// TestSetup setups test env
 // TEST SETUP
-
 func (c *Client) TestSetup() {
 	// necessary setup
 	go c.connectionsHandler()

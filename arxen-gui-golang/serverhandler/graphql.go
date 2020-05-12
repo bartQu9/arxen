@@ -20,21 +20,26 @@ import (
 	"github.com/segmentio/ksuid"
 )
 
+// Route directory for grapql server api
 const GRAPHQL_ROUTE = "/graphql"
 
+// struct combining client with mutex
 type ClientServer struct {
 	client *client.Client
 	mutex  sync.Mutex
 }
 
+// NewChatLastMessage implement me
 func (c *ClientServer) NewChatLastMessage(ctx context.Context, chatID string) (<-chan *string, error) {
 	panic("implement me")
 }
 
+// NewFriend implement me
 func (c *ClientServer) NewFriend(ctx context.Context) (<-chan *gql.Friend, error) {
 	panic("implement me")
 }
 
+// GetFriendsTypeList returns friends of user as string Friend struct
 func (c *ClientServer) GetFriendsTypeList(ctx context.Context) ([]*gql.Friend, error) {
 	var tmpFriendsList []*gql.Friend
 
@@ -59,10 +64,12 @@ func (c *ClientServer) GetFriendsTypeList(ctx context.Context) ([]*gql.Friend, e
 	return []*gql.Friend{}, nil
 }
 
+// ChangeChatName implement me
 func (c *ClientServer) ChangeChatName(ctx context.Context, chatID string, chatName string) (*string, error) {
 	panic("implement me")
 }
 
+// GetFriendList returns friends of user as string list
 func (c *ClientServer) GetFriendList(ctx context.Context) ([]*string, error) {
 	var friendsStringList []*string
 
@@ -82,22 +89,27 @@ func (c *ClientServer) GetFriendList(ctx context.Context) ([]*string, error) {
 	return friendsStringList, nil
 }
 
+// GetUserName returns user name
 func (c *ClientServer) GetUserName(ctx context.Context) (string, error) {
 	return c.client.GetUserID(), nil
 }
 
+// AddFriend implement me
 func (c *ClientServer) AddFriend(ctx context.Context, userUUID string) (*string, error) {
 	panic("implement me")
 }
 
+// ChangeNick implement me
 func (c *ClientServer) ChangeNick(ctx context.Context, userNick string) (*string, error) {
 	panic("implement me")
 }
 
+// ClientWritingAlert implement me
 func (c *ClientServer) ClientWritingAlert(ctx context.Context, chatID string) (<-chan *string, error) {
 	panic("implement me")
 }
 
+// FetchMessages returns numOfMessages messages from particular chat
 func (c *ClientServer) FetchMessages(ctx context.Context, chatID string, numOfMessages int) ([]*gql.TextMessage, error) {
 	// find chat and forward message
 	c.mutex.Lock()
@@ -124,14 +136,17 @@ func (c *ClientServer) FetchMessages(ctx context.Context, chatID string, numOfMe
 	return []*gql.TextMessage{}, nil
 }
 
+// ClientWriting implement me
 func (c *ClientServer) ClientWriting(ctx context.Context, chatID string, userID string) (*string, error) {
 	panic("implement me")
 }
 
+// ChangeChatAvatar implement me
 func (c *ClientServer) ChangeChatAvatar(ctx context.Context, chatID string, avatarAddr string) (*string, error) {
 	panic("implement me")
 }
 
+// NewClientServer returns new ClientServer
 func NewClientServer(client *client.Client) (*ClientServer, error) {
 	return &ClientServer{
 		client: client,
@@ -139,7 +154,7 @@ func NewClientServer(client *client.Client) (*ClientServer, error) {
 	}, nil
 }
 
-// serves graphql and vuejs (in future)
+// Serve serves graphql and vuejs (in future)
 func (c *ClientServer) Serve(port int) error {
 	mux := http.NewServeMux()
 	mux.Handle(
@@ -172,6 +187,7 @@ func (c *ClientServer) Serve(port int) error {
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), handler)
 }
 
+// PostMessage is mutation used to post new message on chat
 func (c *ClientServer) PostMessage(ctx context.Context, chatID string, text string) (*gql.TextMessage, error) {
 
 	m := gql.TextMessage{
@@ -197,6 +213,7 @@ func (c *ClientServer) PostMessage(ctx context.Context, chatID string, text stri
 	return &m, nil
 }
 
+// CreateChat is mutation creating new chat based on users list
 func (c *ClientServer) CreateChat(ctx context.Context, users []string) (*gql.Chat, error) {
 	ch := c.client.CreateChat(users)
 
@@ -216,6 +233,7 @@ func (c *ClientServer) CreateChat(ctx context.Context, users []string) (*gql.Cha
 	return tmpChat, nil
 }
 
+// Messages is query returns all messages from particular chat
 func (c *ClientServer) Messages(ctx context.Context, chatID string) ([]*gql.TextMessage, error) {
 	// find chat and forward message
 	c.mutex.Lock()
@@ -237,6 +255,7 @@ func (c *ClientServer) Messages(ctx context.Context, chatID string) ([]*gql.Text
 	return []*gql.TextMessage{}, nil
 }
 
+// ChatUsers is query that returns chat users
 func (c *ClientServer) ChatUsers(ctx context.Context, chatID string) ([]string, error) {
 	c.mutex.Lock()
 	list := c.client.GetChatList()[chatID].ClientsIPsList()
@@ -256,6 +275,7 @@ func (c *ClientServer) ChatUsers(ctx context.Context, chatID string) ([]string, 
 	return nil, errors.New("clients IPs List could be not returned")
 }
 
+// Chats is query that return chat list
 func (c *ClientServer) Chats(ctx context.Context) ([]*gql.Chat, error) {
 	var chats map[string]*chat.Chat
 	var gqlChats []*gql.Chat
@@ -288,6 +308,7 @@ func (c *ClientServer) Chats(ctx context.Context) ([]*gql.Chat, error) {
 	return gqlChats, nil
 }
 
+// MessagePosted is subscription event when new message is posted in particular chat
 func (c *ClientServer) MessagePosted(ctx context.Context, chatID string) (<-chan *gql.TextMessage, error) {
 	// Create new channel for request
 	c.mutex.Lock()
@@ -304,6 +325,7 @@ func (c *ClientServer) MessagePosted(ctx context.Context, chatID string) (<-chan
 	return messages, nil
 }
 
+// UserJoined is subscription event when new user joins chat
 func (c *ClientServer) UserJoined(ctx context.Context, chatID string) (<-chan string, error) {
 	// TODO implement me
 	// log.Println("UserJoined: chatID ", chatID)
@@ -315,20 +337,25 @@ func (c *ClientServer) UserJoined(ctx context.Context, chatID string) (<-chan st
 	return make(chan string, 1), nil
 }
 
+// ChatCreated is subscription event when new chat is created
+// to be implemented
 func (c *ClientServer) ChatCreated(ctx context.Context) (<-chan *gql.Chat, error) {
 	// TODO implement me
 	log.Println("ChatCreated: ")
 	return make(chan *gql.Chat, 1), nil
 }
 
+// Mutation returns mutation resolver
 func (c *ClientServer) Mutation() gql.MutationResolver {
 	return c
 }
 
+// Query returns query resolver
 func (c *ClientServer) Query() gql.QueryResolver {
 	return c
 }
 
+// Subscription returns subscription resolver
 func (c *ClientServer) Subscription() gql.SubscriptionResolver {
 	return c
 }
