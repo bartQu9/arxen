@@ -9,6 +9,7 @@ export default {}
 </script>
 
 <style lang="scss">
+  @import '~pretty-checkbox/src/pretty-checkbox.scss';
   @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@500&display=swap');
 #app {
   font-family: 'Quicksand', sans-serif;

@@ -1,10 +1,21 @@
 scalar Time
 
 type TextMessage {
+    messageId: String!
     chatId: String!
+    userNick: String
     user: String!
     timeStamp: Time!
     text: String!
+}
+
+type Friend {
+    nick: String
+    userID: String!
+    userIP: String
+    userAvatar: String
+    # online or offline
+    status: Boolean
 }
 
 type Chat {
@@ -12,7 +23,9 @@ type Chat {
     clientsIPsList: [String!]!
     latestMessage: TextMessage
     chatAvatar: String
+    # change to Boolean
     clientWriting: String
+    chatName: String
 }
 # last read
 
@@ -21,6 +34,7 @@ type Mutation {
     createChat(users: [String!]!): Chat
     clientWriting(chatID: String!, userId: String!): String
     changeChatAvatar(chatID: String!, avatarAddr: String!): String
+    changeChatName(chatID: String!, chatName: String!): String
     changeNick(userNick: String!): String
     addFriend(userUUID: String!): String
 }
@@ -29,8 +43,10 @@ type Query {
     messages(chatID: String!): [TextMessage!]
     chatUsers(chatID: String!): [String!]!
     chats: [Chat]!
+    # getChat(chatID: String!): Chat
     fetchMessages(chatID: String!, numOfMessages: Int!): [TextMessage!]
     getFriendList: [String]
+    getFriendsTypeList: [Friend]
     getUserName: String!
 }
 
@@ -38,5 +54,7 @@ type Subscription {
     messagePosted(chatID: String!): TextMessage!
     userJoined(chatID: String!): String!
     chatCreated: Chat!
+    newChatLastMessage(chatID: String!): String
     clientWritingAlert(chatID: String!): String
+    newFriend: Friend
 }

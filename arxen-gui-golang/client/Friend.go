@@ -1,6 +1,6 @@
 package client
 
-// struct for friends store
+// Friend struct for friends store
 type Friend struct {
 	Name      string `json:"name"`
 	FriendIP  string `json:"friendIP"`

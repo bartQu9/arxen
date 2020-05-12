@@ -1,7 +1,7 @@
 <template>
     <div class="rooms-container app-border-r">
         <div v-if="!showFriendList">
-            <h2>Chats</h2>
+            <h1 style="margin: 20px 20px">Chats</h1>
             <slot name="rooms-header"></slot>
             <div class="box-search">
                 <div class="icon-search" v-if="chats.length">
@@ -25,25 +25,21 @@
                 <app-chat-miniature v-for="chat of chats"
                                     :key="chat.chatId"
                                     :chat="chat"
+                                    :class="{ 'room-selected': selectedChatId === chat.chatId }"
                                     @click.native="openChat(chat)">
                 </app-chat-miniature>
             </div>
         </div>
 
         <div v-if="showFriendList">
-            <h2>Friends</h2>
+
+            <h1 style="margin: 20px 20px">Friends</h1>
+
             <slot name="rooms-header"></slot>
 
-            <div
-                    class="svg-button toggle-button"
-                    :class="{ 'rotate-icon': !showRoomsList && !isMobile }"
-                    @click="showFriendList = !showFriendList"
-            >
-                <svg-icon name="toggle"/>
-            </div>
 
             <div class="box-search">
-                <div class="icon-search" v-if="chats.length">
+                <div class="icon-search" v-if="getFriendList.length">
                     <svg-icon name="search"/>
                 </div>
                 <input
@@ -53,6 +49,14 @@
                         @input="searchFriends"
                         v-show="chats.length"
                 />
+                <div
+                        class="svg-button toggle-button"
+                        :class="{ 'rotate-icon': !showFriendList }"
+                        @click="showFriendList = !showFriendList"
+                        style="margin-left: 10px; margin-right: 0; align-content: center"
+                >
+                    <svg-icon name="toggle"/>
+                </div>
             </div>
 
             <loader :show="loadingFriends"></loader>
@@ -60,12 +64,12 @@
             <div v-if="!loadingChats" class="room-list">
                 <div v-for="friend in getFriendList"
                      :key="friend">
-                    <div class="box-search">
-                        <input type="checkbox" v-model="selectedFriends" :value="friend"/>
-                        <label>{{friend}}</label>
-                    </div>
+                    <p-check type="checkbox" class="p-default p-round p-fill p-smooth p-plain" style="margin-top: 10px; margin-bottom: 10px" v-model="selectedFriends" :value="friend">
+                        {{friend}}
+                    </p-check>
                 </div>
             </div>
+
 
             <div ref="roomFooter" class="room-footer">
                 <div class="box-footer">
@@ -90,10 +94,12 @@
     import ChatMiniature from "@/components/ChatMiniature";
     import SvgIcon from "@/components/SvgIcon";
     import Loader from "@/components/Loader";
+    import PrettyCheck from 'pretty-checkbox-vue/check'
 
     export default {
         name: "ChatList",
         components: {
+            'p-check': PrettyCheck,
             'app-chat-miniature': ChatMiniature,
             'svg-icon': SvgIcon,
             'loader': Loader,
@@ -103,14 +109,14 @@
                 selectedFriends: [],
                 chats: [],
                 getFriendList: [],
+                loadingFriends: false,
+                showFriendList: false,
+                showAddChat: {type: Boolean, default: true},
+                showChatList: {type: Boolean, default: true},
             };
         },
         props: {
-            loadingFriends: {type: Boolean, default: false},
-            showFriendList: {type: Boolean, default: false},
             selectedChatId: {type: String},
-            showAddChat: {type: Boolean, default: true},
-            showChatList: {type: Boolean, default: true},
             loadingChats: {type: Boolean, default: false},
         },
         methods: {
@@ -161,7 +167,7 @@
             chats() {
                 //const chat = this.$currentChats();
                 return {
-                    query: gql`{ chats { chatId clientsIPsList } }`,
+                    query: gql`{ chats { chatId clientsIPsList chatName latestMessage { text } } }`,
                     subscribeToMore: {
                         //  subscription($user: String!) { chatCreated(chat: $chat) }
                         document: gql`subscription{ chatCreated { chatId clientsIPsList } }`,
@@ -184,10 +190,15 @@
         },
     }
 
-
+    // <div class="box-search">
+    //     <input type="checkbox" v-model="selectedFriends" :value="friend"/>
+    //     <label>{{friend}}</label>
+    // </div>
 </script>
 
 <style lang="scss" scoped>
+
+
     .rooms-container {
         flex: 0 0 25%;
         min-width: 260px;

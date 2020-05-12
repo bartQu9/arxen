@@ -38,8 +38,10 @@ import (
 // - connect with other clients daemons
 // - control every chat user is participating in
 
+// rate of refreshing connections with other clients
 const CONNECTIONS_UPDATE_REFRESH_RATE = 10 * time.Second
 
+// Client: basic struct handling connections between other clients
 type Client struct {
 	userIP     string
 	clientsIPs map[string]bool // clientIP : status
@@ -49,17 +51,18 @@ type Client struct {
 	sendDataList        map[string]chan payload.Payload // payload and target chat format: map[clientIP] payload(message, chatID)
 	receivedPayloadChan chan payload.Payload            // channel with all incoming payloads
 
-	FriendsList map[string]Friend // map[friendsNick]Friend
+	FriendsList map[string]*gql.Friend // map[friendsNick]Friend
 	secretKey   string            // used for authentication
 
 	mutex 		sync.Mutex			// to prevent access to same data by two goroutines
 }
 
+// GetChatList returns chat list map
 func (c *Client) GetChatList() map[string]*chat.Chat {
 	return c.chatList
 }
 
-// return new Client
+// NewClient returns new Client
 func NewClient() *Client {
 	// default port
 	userAddr := "tcp://127.0.0.2:7878"
@@ -84,7 +87,7 @@ func NewClient() *Client {
 	_chatList := make(map[string]*chat.Chat)
 	_sendMessageList := make(map[string]chan payload.Payload)
 	_receivedPayloadChan := make(chan payload.Payload)
-	_FriendsList := make(map[string]Friend)
+	_FriendsList := make(map[string]*gql.Friend)
 
 	return &Client{
 		userIP:              userAddr,
@@ -97,7 +100,7 @@ func NewClient() *Client {
 	}
 }
 
-// method listening and handling new connections to client
+// eventListener is method listening and handling new connections to client
 func (c *Client) eventListener() {
 	// await for new connections
 	err := rsocket.Receive().
@@ -116,8 +119,8 @@ func (c *Client) eventListener() {
 	panic(err)
 }
 
+// CreateChat method is used to create new chat
 // TODO implement till the end
-// method used to create new chat
 func (c *Client) CreateChat(initList []string) *chat.Chat {
 
 	chatIDstr := uuid.New().String()
@@ -177,6 +180,7 @@ func (c *Client) CreateChat(initList []string) *chat.Chat {
 	*/
 }
 
+// createSlaveChat is version of CreateChat used when chatID is already known
 func (c *Client) createSlaveChat(initList []string, chatIDstr string) {
 	// init new chat with complete users list
 	// add userIP ex"tcp://10.5.0.2:7878" to that list
@@ -206,7 +210,7 @@ func (c *Client) createSlaveChat(initList []string, chatIDstr string) {
 
 }
 
-// handler of all connections across itself and other clients
+// connectionsHandler is a handler of all connections across itself and other clients
 func (c *Client) connectionsHandler() {
 	for {
 		// refresh at rate
@@ -234,6 +238,7 @@ func (c *Client) connectionsHandler() {
 	}
 }
 
+// connectToClient periodically check if client is connected to desired clients
 // Possible type problem: struct vs payload
 func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 	// goroutine for connecting to clients
@@ -305,17 +310,20 @@ func (c *Client) connectToClient(ch chan payload.Payload, addr string) {
 		BlockLast(context.Background())
 }
 
+// clientManager is not in use at this moment
 // runs eventListener() and manages connections
 func (c *Client) clientManager() {
 
 }
 
+// GetUserID returns userIP/ID
+// TODO solve userID/IP
 func (c *Client) GetUserID() string {
 	// TODO change in the future
 	return c.userIP
 }
 
-// used to obtain machine IP address
+// GetOutboundIP can be used to obtain machine IP address
 func GetOutboundIP() (net.IP, bool) {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
@@ -328,6 +336,7 @@ func GetOutboundIP() (net.IP, bool) {
 	return localAddr.IP, true
 }
 
+// responder is factory for rsocket.RSocket instance
 func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 	// custom responder
 	return rsocket.NewAbstractSocket(
@@ -416,7 +425,7 @@ func (c *Client) responder(setup payload.SetupPayload) rsocket.RSocket {
 // CHAT_MESSAGE:			  {message,{source, type, chatID}}
 // CHAT_PARTICIPANTS_REQUEST: {chatID, {source, type}}
 
-// helper, handling all incoming messages from each connection
+// receivedPayloadHandler is helper, handling all incoming messages from each connection
 func (c *Client) receivedPayloadHandler() {
 	// this "for" is basically onNext()
 	for payl := range c.receivedPayloadChan {
@@ -486,7 +495,7 @@ func (c *Client) receivedPayloadHandler() {
 						c.sendDataList[addr] = ch
 					}
 					// send to each chan CHAT_ADVERT
-					c.sendDataList[addr] <- payload.New(payl.Data(), c.getMetadataTag(CHAT_ADVERT))
+					c.sendDataList[addr] <- payload.New(payl.Data(), c.getMetadataTag(CHAT_ADVERT, payl.DataUTF8()))
 				}
 			}
 		case CHAT_ADVERT:
@@ -507,12 +516,12 @@ func (c *Client) receivedPayloadHandler() {
 	}
 }
 
-// handles forwarding messages from particular chat
+// chatMessagesHandler handles forwarding messages from particular chat
 func (c *Client) chatMessagesHandler(chat *chat.Chat) {
 	for newMessageToBeSend := range chat.SendMessageChan {
 
 		// transform message
-		payloadMessage := payload.New([]byte(newMessageToBeSend.Text), c.getMetadataTag(CHAT_MESSAGE, chat.ChatID, newMessageToBeSend.User, newMessageToBeSend.TimeStamp.String()))
+		payloadMessage := payload.New([]byte(newMessageToBeSend.Text), c.getMetadataTag(CHAT_MESSAGE, chat.ChatID, newMessageToBeSend.User, newMessageToBeSend.TimeStamp.String(), newMessageToBeSend.MessageID))
 
 		// forward to oneself
 		c.receivedPayloadChan <- payloadMessage
@@ -528,7 +537,7 @@ func (c *Client) chatMessagesHandler(chat *chat.Chat) {
 	}
 }
 
-// function returning metadata for payload
+// getMetadataTag: function returning metadata for payload
 // args:
 // args[0]: type of request/response to be generated
 // args[1:]: extra arguments:
@@ -543,22 +552,26 @@ func (c *Client) getMetadataTag(args ...string) []byte {
 		}
 		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `","chatID":"` + args[1] + `"}`)
 	case CHAT_MESSAGE:
-		// args[1]: chatID, args[2]: user, args[3]: timeStamp
-		if len(args) < 4 {
+		// args[1]: chatID, args[2]: user, args[3]: timeStamp, args[4]: MessageID
+		if len(args) < 5 {
 			panic("getMetadataTag: Too few arguments")
 		}
-		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `","chatId":"` + args[1] + `", "user":"` + args[2] + `", "timeStamp":"` + args[3] + `"}`)
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `","chatId":"` + args[1] + `", "user":"` + args[2] + `", "timeStamp":"` + args[3] + `", "MessageID": "`+ args[4] +`"}`)
 	case CHAT_ADVERT_REQUEST:
 		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `"}`)
 	case CHAT_ADVERT:
-		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `"}`)
+		// args[1]: chatName
+		if len(args) < 2 {
+			panic("getMetadataTag: Too few arguments")
+		}
+		return []byte(`{"source":"` + c.userIP + `", "type":"` + args[0] + `", "chatName": "` + args[1] + `"}`)
 	default:
 		log.Fatalln("getMetadataTag: Bad message type")
 		return nil
 	}
 }
 
-// Convert incoming payload to TextMessage (defined in gql module)
+// PayloadToGraphqlTextMessage converts incoming payload to TextMessage (defined in gql module)
 // CHAT_MESSAGE:			  {text,{source, type, chatID/chatId, user, timeStamp}}
 // where text is part of TextMessage
 func PayloadToGraphqlTextMessage(p payload.Payload) gql.TextMessage {
@@ -590,6 +603,7 @@ func PayloadToGraphqlTextMessage(p payload.Payload) gql.TextMessage {
 	}
 
 	return gql.TextMessage{
+		MessageID: metadata["MessageID"].(string),
 		ChatID:    chatID,
 		User:      metadata["user"].(string),
 		TimeStamp: date,
@@ -597,7 +611,7 @@ func PayloadToGraphqlTextMessage(p payload.Payload) gql.TextMessage {
 	}
 }
 
-// converts text message format to bytes
+// GraphqlTextMessageToByte converts text message format to bytes
 // probably redundant in the future
 func GraphqlTextMessageToByte(message gql.TextMessage) []byte {
 	jsonMessage, err := json.Marshal(message)
@@ -689,8 +703,8 @@ func GraphqlTextMessageToByte(message gql.TextMessage) []byte {
 //	}
 //}
 
+// TestSetup setups test env
 // TEST SETUP
-
 func (c *Client) TestSetup() {
 	// necessary setup
 	go c.connectionsHandler()
@@ -699,9 +713,12 @@ func (c *Client) TestSetup() {
 
 	var participants []string
 
-	c.FriendsList["tcp://127.0.0.3:7878"] = Friend{
-		Name:     "tcp://127.0.0.3:7878",
-		FriendIP: "tcp://127.0.0.3:7878",
+	tmpFriend := "tcp://127.0.0.3:7878"
+
+	c.FriendsList[tmpFriend] = &gql.Friend{
+		Nick:   &tmpFriend,
+		UserID: tmpFriend,
+		UserIP: &tmpFriend,
 	}
 
 	logger.Debug("TestSetup: friendslist = ", c.FriendsList)
@@ -711,9 +728,11 @@ func (c *Client) TestSetup() {
 		logger.Info("TestSetup: chat setup connect to = ", participants)
 
 		for _, part := range participants {
-			c.FriendsList[part] = Friend{
-				Name:     part,
-				FriendIP: part,
+			tmpNick := part
+			c.FriendsList[part] = &gql.Friend{
+				Nick:       &tmpNick,
+				UserID:     part,
+				UserIP: 	&tmpNick,
 			}
 		}
 	}

@@ -37,6 +37,7 @@ export const defaultThemeStyles = {
         sidemenu: {
             background: '#fff',
             backgroundHover: '#f6f6f6',
+            backgroundCustomHover: '#d0d0d0',
             backgroundActive: '#e5effa',
             colorActive: '#1976d2',
             borderColorSearch: '#e1e5e8'
@@ -148,6 +149,7 @@ export const defaultThemeStyles = {
         sidemenu: {
             background: '#181a1b',
             backgroundHover: '#202224',
+            backgroundCustomHover: '#292929',
             backgroundActive: '#151617',
             colorActive: '#fff',
             borderColorSearch: '#181a1b'
@@ -340,6 +342,9 @@ export const cssThemeVars = ({
         '--chat-icon-color-eye': icons.eye,
         '--chat-icon-color-dropdown-message': icons.dropdownMessage,
         '--chat-icon-bg-dropdown-message': icons.dropdownMessageBackground,
-        '--chat-icon-color-dropdown-scroll': icons.dropdownScroll
+        '--chat-icon-color-dropdown-scroll': icons.dropdownScroll,
+
+        // custom menu
+        '--custom-menu-sidemenu-bg-color-hover': sidemenu.backgroundCustomHover,
     }
 }
