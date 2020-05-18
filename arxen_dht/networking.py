@@ -91,20 +91,17 @@ class SockHandler:
         self.close_socket()
 
 
-
 class NetworkHandler:
-    class Task:
-        def __init__(self, task_type, in_data, out_data, flags=None):
-            if flags is None:
-                flags = []
-            self.type = task_type
-            self.in_data = in_data
-            self.out_data = out_data
 
     def __init__(self):
-        pass
+        self.socket_handler = SockHandler()
+        self.socket_handler.bind_sock()
+        self.socket_handler.start_listening_sending()
 
-    def run(self):
-        # get tasks from task queue e.g. send()..
-        pass
 
+    # OBSCURE HERE
+    def get_rcv_buff(self):
+        return self.socket_handler.rcv_buff
+
+    def send_bytes(self, data, addr):
+        self.socket_handler.send(data, addr)
