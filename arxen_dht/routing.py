@@ -12,7 +12,9 @@ import uuid
 from logging import debug, info, warning, error
 from arxen_dht.networking import NetworkHandler
 
+
 class UnknownResponse(Exception): pass
+
 
 class KadProperties:
     """
@@ -160,7 +162,6 @@ class FindNodeRPC(RequestRPC):
                          remote_node=remote_node, *args, **kwargs)
 
 
-
 class FindValueRPC(RequestRPC):
     def __init__(self, value_id: int, *args, **kwargs):
         """
@@ -171,7 +172,7 @@ class FindValueRPC(RequestRPC):
 
 class PingRPC(RequestRPC):
     def __init__(self, remote_node: Node, seq_value=None, *args, **kwargs):
-        if not seq_value: seq_value = randint(1, 2**64)
+        if not seq_value: seq_value = randint(1, 2 ** 64)
         super().__init__(remote_node=remote_node,
                          rpc_command="PING", command_arg={"seq_value": seq_value}, *args, **kwargs)
 
@@ -195,6 +196,7 @@ class ResponseRPC(KadRPC):
         append_part = {"request_rpc_uuid": request_rpc_uuid_b64, "response_data_type": response_data_type,
                        "response_data": response_data}
         super().__init__(rpc_type="RESPONSE", append_part=append_part, *args, **kwargs)
+
 
 class FindNodeResponseRPC(ResponseRPC):
     def __init__(self, nodes: list, request_rpc_uuid_b64, *args, **kwargs):
@@ -233,9 +235,9 @@ class FindValueResponseRPC(ResponseRPC):
                          response_data=response_data, *args, **kwargs)
 
     def _recognize_type(self):
-        #determine if Node list or value was passed to the constructor
+        # determine if Node list or value was passed to the constructor
         if type(self.data) is list:
-            ret = "node_list" # this node doesn't store the value so the nearest nodes were returned instead
+            ret = "node_list"  # this node doesn't store the value so the nearest nodes were returned instead
         elif type(self.data) is bytes:
             ret = "value"
         else:
@@ -267,6 +269,7 @@ class FindValueResponseRPC(ResponseRPC):
             decoded_value = base64_decode(data["response_data"])
             return cls(decoded_value, data["request_rpc_uuid"])
 
+
 class PingResponseRPC(ResponseRPC):
     def __init__(self, seq_value: int, request_rpc_uuid_b64, *args, **kwargs):
         request_rpc_uuid_b64 = request_rpc_uuid_b64
@@ -278,6 +281,7 @@ class PingResponseRPC(ResponseRPC):
     @classmethod
     def from_dict(cls, data: dict):
         return cls(data["response_data"], data["request_rpc_uuid"])
+
 
 class StoreResponseRPC(ResponseRPC):
     def __init__(self, store_successfull, request_rpc_uuid_b64, *args, **kwargs):
@@ -355,7 +359,8 @@ class KadManageableTask(KadTask):
         """
         simply waits for data in ingress queue and return first value
         """
-        self.ingress_queue.get(block=True, timeout=timeout)
+        return self.ingress_queue.get(block=True, timeout=timeout)
+
 
 
 class KadListenerTask(KadManageableTask):
@@ -381,6 +386,18 @@ class KadListenerTask(KadManageableTask):
         raise KeyError("No registered KadRequestTask with given uuid")
 
 
+class KadRequestTask(KadManageableTask):
+
+    def __init__(self, this_node: Node, routing_table: _KadRoutingTable, response_listener: KadListenerTask,
+                 remote_node: Node = None, network_handler: NetworkHandler = None, *args, **kwargs):
+        self.this_node = this_node
+        self.remote_node = remote_node
+        self.routing_table = routing_table
+        self.network_handler = network_handler
+        self.response_listener = response_listener
+        super().__init__(*args, **kwargs)
+
+
 class ListenForRPCs(KadListenerTask):
     """
     is responsible for recognition of type of RPC: data, ping echo, FIND_NODE response etc.
@@ -403,40 +420,37 @@ class ListenForRPCs(KadListenerTask):
                     continue  # go to the next packet
 
                 if data["type"] == "REQUEST":
-                    pass #handle request
+                    pass  # handle request
                 elif data["type" == "RESPONSE"]:
                     try:
-                        response = self.handle_response(data)
+                        responsible_task = self.get_responsible_task(data)
+                        response = self.build_response_from_data(data, responsible_task)
+                        responsible_task.ingress_queue.put(response)
                     except UnknownResponse as e:
                         warning(e)
-    def handle_response(self, rpc_data: dict) -> ResponseRPC:
+                        continue  # GOTO next rpc
+
+    @staticmethod
+    def build_response_from_data(rpc_data: dict, responsible_task: KadManageableTask) -> ResponseRPC:
+
+        response_type = type(responsible_task)
+        if response_type is FindNodeRPC:
+            return FindNodeResponseRPC.from_dict(rpc_data)
+        elif response_type is FindValueRPC:
+            return FindValueResponseRPC.from_dict(rpc_data)
+        elif response_type is StoreRPC:
+            return StoreResponseRPC.from_dict(rpc_data)
+        elif response_type is PingRPC:
+            return PingResponseRPC.from_dict(rpc_data)
+
+    def get_responsible_task(self, rpc_data: dict):
         request_b64_uuid = rpc_data["request_rpc_uuid"]
         try:
             responsible_request_task = self.get_registered_task_by_request_uuid(request_b64_uuid)
         except KeyError:
-            raise UnknownResponse("Response with unregistered request_uuid was received, uuid={}".format(request_b64_uuid))
-
-        if type(responsible_request_task) == FindNodeRPC:
-            response_rpc = FindNodeResponseRPC.from_dict(rpc_data)
-        elif type()
-
-
-
-
-
-
-
-
-class KadRequestTask(KadManageableTask):
-
-    def __init__(self, this_node: Node, routing_table: _KadRoutingTable, response_listener: KadListenerTask,
-                 remote_node: Node = None, network_handler: NetworkHandler = None, *args, **kwargs):
-        self.this_node = this_node
-        self.remote_node = remote_node
-        self.routing_table = routing_table
-        self.network_handler = network_handler
-        self.response_listener = response_listener
-        super().__init__(*args, **kwargs)
+            raise UnknownResponse(
+                "Response with unregistered request_uuid was received, uuid={}".format(request_b64_uuid))
+        return responsible_request_task
 
 
 class FindNodeTask(KadRequestTask):
@@ -463,19 +477,25 @@ class FindNodeTask(KadRequestTask):
                 self.spawn_task(FindNodeTask(self.lookup_node, remote_node=node))
                 # Here handle returned nodes from childs
 
-        # Run as a child which queries remote node
+        # Run as a child querying a remote node
         if self.remote_node:
             new_rpc = FindNodeRPC(self.lookup_node, self.remote_node, node=self.this_node)
             self.network_handler.send_bytes(new_rpc.get_serialized(), self.remote_node.ip_info)
             self.response_listener.register(self)
 
             try:
-                self.join_ingress_queue()
+                response: FindNodeResponseRPC = self.join_ingress_queue()   # wait for Response() from ListenFromRPCs()
+                debug("{}: received response {}".format(self, response))
             except TimeoutError:
                 # requested node hasn't responded
                 # TODO remove this inactive node from the routing table
                 self.response_listener.unregister(self)  # DO NOT wait for the answer anymore
                 return  # terminate this task
+            for node in response.nodes:
+                self.send_result(node)
+            # Successfully passed nodes to the parent so now die
+            self.response_listener.unregister(self)
+            return
 
 
 class KadEngine:
