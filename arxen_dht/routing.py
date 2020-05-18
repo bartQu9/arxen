@@ -6,7 +6,7 @@ from time import time
 from random import randint
 from secrets import randbits
 from threading import Thread
-from queue import Queue
+from queue import Queue, Empty
 from encodings.base64_codec import base64_encode, base64_decode
 import uuid
 from logging import debug, info, warning, error
@@ -23,6 +23,11 @@ class KadProperties:
     PARAM_ALPHA = 10
     PARAM_K = 20
     PARAM_NAMESPACE_SIZE = 256
+
+    # timeouts in secs
+    RPC_TIMEOUT = 5  # amount of time between sending an RPC and (not) receiving a response
+    NODE_LOOKUP_TIMEOUT = 30  # max amount of time a local routine call can spend on looking up a single node
+    VALUE_LOOKUP_TIMEOUT = 60
 
 
 class Node:
@@ -321,7 +326,18 @@ class KadTask(Thread):
         self.ingress_queue = Queue()
         self.egress_queue = egress_queue
 
+        self.start_time = None
+        self.end_time = None
+
         debug("Initialized {}".format(self.getName()))
+
+    def run_task(self) -> None:
+        return
+
+    def run(self) -> None:
+        self.start_time = time()
+        self.run_task()
+        self.end_time = time()
 
     @staticmethod
     def get_existing_kad_tasks() -> list:
@@ -355,12 +371,24 @@ class KadManageableTask(KadTask):
 
         self.egress_queue.put(result)
 
-    def join_ingress_queue(self, timeout: int = 60):
+    def join_ingress_queue(self, timeout):
         """
         simply waits for data in ingress queue and return first value
         """
         return self.ingress_queue.get(block=True, timeout=timeout)
 
+    def get_running_time(self) -> float:
+        if self.start_time:
+            if self.end_time:
+                return self.end_time - self.start_time
+            else:
+                return time() - self.start_time
+
+    def timeout_left(self, timeout: int) -> float:
+        """returns time left to the timeout or 0 if already exceeded timeout"""
+        if self.end_time:
+            return 0
+        return max(0.0, timeout - self.get_running_time())
 
 
 class KadListenerTask(KadManageableTask):
@@ -407,7 +435,7 @@ class ListenForRPCs(KadListenerTask):
         self.network_handler = network_handler
         super().__init__(facility="ListenForRPCs", *args, **kwargs)
 
-    def run(self) -> None:
+    def run_task(self) -> None:
         datagram_rcv_buff = self.network_handler.get_rcv_buff()
         while not self.killed:
             packets = datagram_rcv_buff.join()
@@ -454,7 +482,7 @@ class ListenForRPCs(KadListenerTask):
 
 
 class FindNodeTask(KadRequestTask):
-    def __init__(self, lookup_node_id: int, entry_point: bool = False, *args, **kwargs):
+    def __init__(self, lookup_node_id: int, entry_point: bool = False, iterate_step: int = 0, *args, **kwargs):
         """
         :param node_id: node we are trying to find
         :param EntryPoint: Flag is set true if this task is used to initialize performing lookup process
@@ -463,7 +491,7 @@ class FindNodeTask(KadRequestTask):
         self.entry_point = entry_point
         super().__init__(facility="FindNodeTask", *args, **kwargs)
 
-    def run(self):
+    def run_task(self):
         debug("running {}".format(self))
         nearest_nodes = []
         queried_nodes = []
@@ -473,9 +501,17 @@ class FindNodeTask(KadRequestTask):
             # First select my nearest nodes
             my_nearest_nodes = self.routing_table.route_to(self.lookup_node)
             nearest_nodes.extend(my_nearest_nodes)
+
+            #  First my closest nodes
             for node in my_nearest_nodes:
                 self.spawn_task(FindNodeTask(self.lookup_node, remote_node=node))
-                # Here handle returned nodes from childs
+                queried_nodes.append(node)
+
+            while not self.killed or not self.timeout_left(KadProperties.NODE_LOOKUP_TIMEOUT):
+                my_nearest_nodes.append(self.join_ingress_queue(self.timeout_left(KadProperties.NODE_LOOKUP_TIMEOUT)))
+
+
+        # Here handle returned nodes from childs
 
         # Run as a child querying a remote node
         if self.remote_node:
@@ -484,9 +520,10 @@ class FindNodeTask(KadRequestTask):
             self.response_listener.register(self)
 
             try:
-                response: FindNodeResponseRPC = self.join_ingress_queue()   # wait for Response() from ListenFromRPCs()
+                # wait for Response() from ListenFromRPCs()
+                response: FindNodeResponseRPC = self.join_ingress_queue(KadProperties.RPC_TIMEOUT)
                 debug("{}: received response {}".format(self, response))
-            except TimeoutError:
+            except Empty:
                 # requested node hasn't responded
                 # TODO remove this inactive node from the routing table
                 self.response_listener.unregister(self)  # DO NOT wait for the answer anymore
