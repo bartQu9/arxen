@@ -7,11 +7,12 @@ from random import randint
 from secrets import randbits
 from threading import Thread
 from queue import Queue
-from encodings.base64_codec import base64_encode
+from encodings.base64_codec import base64_encode, base64_decode
 import uuid
 from logging import debug, info, warning, error
 from arxen_dht.networking import NetworkHandler
 
+class UnknownResponse(Exception): pass
 
 class KadProperties:
     """
@@ -159,6 +160,7 @@ class FindNodeRPC(RequestRPC):
                          remote_node=remote_node, *args, **kwargs)
 
 
+
 class FindValueRPC(RequestRPC):
     def __init__(self, value_id: int, *args, **kwargs):
         """
@@ -203,11 +205,20 @@ class FindNodeResponseRPC(ResponseRPC):
         super().__init__(request_rpc_uuid_b64=request_rpc_uuid_b64, response_data_type=response_data_type,
                          response_data=response_data, *args, **kwargs)
 
-    def _fill_nodes(self):
-        resp = {}
+    def _fill_nodes(self) -> list:
+        resp = []
         for node in self.nodes:
-            resp.update({"node": {"id": node.node_id, "ip": node.ip_info[0], "port": node.ip_info[1]}})
+            resp.append({"id": node.node_id, "ip": node.ip_info[0], "port": node.ip_info[1]})
         return resp
+
+    @classmethod
+    def from_dict(cls, data_dict: dict):
+        nodes_jsoned = data_dict["response_data"]
+        nodes = []
+        for n in nodes_jsoned:
+            nodes.append(Node(n["id"], (n["ip"], n["port"])))
+        return cls(nodes=nodes, request_rpc_uuid_b64=data_dict["request_rpc_uuid"])
+
 
 class FindValueResponseRPC(ResponseRPC):
     def __init__(self, data, request_rpc_uuid_b64, *args, **kwargs):
@@ -233,15 +244,28 @@ class FindValueResponseRPC(ResponseRPC):
 
     def _parse_data(self):
         if self.recognized_type == "node_list":
-            parsed_data = {}
+            parsed_data = []
             for node in self.data:
-                parsed_data.update({"node": {"id": node.node_id, "ip": node.ip_info[0], "port": node.ip_info[1]}})
+                parsed_data.append({"id": node.node_id, "ip": node.ip_info[0], "port": node.ip_info[1]})
         elif self.recognized_type == "value":
             b64_value = base64_encode(self.data)
             parsed_data = b64_value
         else:
             raise TypeError("urecognized type in recognized_type")
         return parsed_data
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        response_data_type = data["response_data_type"]
+        if response_data_type == "node_list":
+            nodes_jsoned = data["response_data"]
+            nodes = []
+            for n in nodes_jsoned:
+                nodes.append(Node(n["id"], (n["ip"], n["port"])))
+            return cls(nodes, data["request_rpc_uuid"])
+        elif response_data_type == "value":
+            decoded_value = base64_decode(data["response_data"])
+            return cls(decoded_value, data["request_rpc_uuid"])
 
 class PingResponseRPC(ResponseRPC):
     def __init__(self, seq_value: int, request_rpc_uuid_b64, *args, **kwargs):
@@ -250,6 +274,10 @@ class PingResponseRPC(ResponseRPC):
         response_data = seq_value
         super().__init__(request_rpc_uuid_b64=request_rpc_uuid_b64, response_data_type=response_data_type,
                          response_data=response_data, *args, **kwargs)
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(data["response_data"], data["request_rpc_uuid"])
 
 class StoreResponseRPC(ResponseRPC):
     def __init__(self, store_successfull, request_rpc_uuid_b64, *args, **kwargs):
@@ -262,6 +290,9 @@ class StoreResponseRPC(ResponseRPC):
         super().__init__(request_rpc_uuid_b64=request_rpc_uuid_b64, response_data_type=response_data_type,
                          response_data=response_data, *args, **kwargs)
 
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(data["response_data"], data["request_rpc_uuid"])
 
 
 class KadTask(Thread):
@@ -343,6 +374,12 @@ class KadListenerTask(KadManageableTask):
     def unregister(self, task: KadManageableTask):
         self.registered_tasks.remove(task)
 
+    def get_registered_task_by_request_uuid(self, b64_request_uuid: str) -> KadManageableTask:
+        for task in self.registered_tasks:
+            if str(base64_encode(task.rpc_uuid)) == b64_request_uuid:
+                return task
+        raise KeyError("No registered KadRequestTask with given uuid")
+
 
 class ListenForRPCs(KadListenerTask):
     """
@@ -368,11 +405,30 @@ class ListenForRPCs(KadListenerTask):
                 if data["type"] == "REQUEST":
                     pass #handle request
                 elif data["type" == "RESPONSE"]:
+                    try:
+                        response = self.handle_response(data)
+                    except UnknownResponse as e:
+                        warning(e)
+    def handle_response(self, rpc_data: dict) -> ResponseRPC:
+        request_b64_uuid = rpc_data["request_rpc_uuid"]
+        try:
+            responsible_request_task = self.get_registered_task_by_request_uuid(request_b64_uuid)
+        except KeyError:
+            raise UnknownResponse("Response with unregistered request_uuid was received, uuid={}".format(request_b64_uuid))
+
+        if type(responsible_request_task) == FindNodeRPC:
+            response_rpc = FindNodeResponseRPC.from_dict(rpc_data)
+        elif type()
+
+
+
+
 
 
 
 
 class KadRequestTask(KadManageableTask):
+
     def __init__(self, this_node: Node, routing_table: _KadRoutingTable, response_listener: KadListenerTask,
                  remote_node: Node = None, network_handler: NetworkHandler = None, *args, **kwargs):
         self.this_node = this_node
