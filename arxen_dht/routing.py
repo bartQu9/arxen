@@ -51,9 +51,9 @@ class Node:
 
 
 class _KadRoutingTable:
-    def __init__(self, my_node_id: int, bucket_size: int = KadProperties.PARAM_K,
+    def __init__(self, my_node: Node, bucket_size: int = KadProperties.PARAM_K,
                  buckets_count: int = KadProperties.PARAM_NAMESPACE_SIZE, ):
-        self.my_node_id = my_node_id
+        self.my_node = my_node
         self.bucket_size = bucket_size
         self.buckets_count = buckets_count
         self.buckets = self._create_buckets()
@@ -68,7 +68,7 @@ class _KadRoutingTable:
         ID2: 0111
               ^------returns 2 (second bit counting from 0 right)
         """
-        xor = self.my_node_id ^ comparable_id
+        xor = self.my_node.node_id ^ comparable_id
         nth_position = 0
         while xor != 1:
             xor >>= 1
@@ -106,6 +106,23 @@ class _KadRoutingTable:
                 break
 
         return collected_nodes[:next_hops_count]
+
+    @staticmethod
+    def distance(node_a: Node, node_b: Node):
+        """
+        :return: XOR distance between a and b
+        """
+        return node_a.node_id ^ node_b.node_id
+
+    def get_n_nearest(self, nodes: list, n: int, exclude=None):
+        """Gets n nearest nodes from nodes list excluding nodes listed in exclude"""
+        if exclude is None:
+            exclude = []
+        node_dist = []
+        for node in nodes:
+            node_dist.append([self.distance(self.my_node, node), node])
+        node_dist.sort(key=lambda _: _[0])
+
 
 
 class KadRPC:
@@ -508,8 +525,9 @@ class FindNodeTask(KadRequestTask):
                 queried_nodes.append(node)
 
             while not self.killed or not self.timeout_left(KadProperties.NODE_LOOKUP_TIMEOUT):
-                my_nearest_nodes.append(self.join_ingress_queue(self.timeout_left(KadProperties.NODE_LOOKUP_TIMEOUT)))
-
+                nodes = self.join_ingress_queue(self.timeout_left(KadProperties.NODE_LOOKUP_TIMEOUT))
+                nearest_nodes += nodes
+                debug("{} received node bundle: {}".format(self, nodes))
 
         # Here handle returned nodes from childs
 
@@ -528,8 +546,7 @@ class FindNodeTask(KadRequestTask):
                 # TODO remove this inactive node from the routing table
                 self.response_listener.unregister(self)  # DO NOT wait for the answer anymore
                 return  # terminate this task
-            for node in response.nodes:
-                self.send_result(node)
+            self.send_result(response.nodes)  # push returned nodes to the parent
             # Successfully passed nodes to the parent so now die
             self.response_listener.unregister(self)
             return
@@ -544,10 +561,3 @@ class KadEngine:
         self.routing_table = _KadRoutingTable(self.my_node.node_id)
 
         self.rpc_listener = ListenForRPCs(self.network_handler)
-
-    @staticmethod
-    def distance(self, node_a: Node, node_b: Node):
-        """
-        :return: XOR distance between a and b
-        """
-        return node_a.node_id ^ node_b.node_id
